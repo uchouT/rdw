@@ -83,7 +83,7 @@ pub mod imp {
         pub(crate) cursor: RefCell<Option<gdk::Cursor>>,
         pub(crate) mouse_absolute: Cell<bool>,
         // position of cursor when drawn by client
-        pub(crate) cursor_position: Cell<Option<(usize, usize)>>,
+        pub(crate) cursor_position: Cell<Option<(i32, i32)>>,
         // press-and-release detection time in ms
         pub(crate) synthesize_delay: Cell<u32>,
         pub(crate) last_key_press: Cell<Option<(gdk::Key, u32)>>,
@@ -510,8 +510,10 @@ pub mod imp {
             if let Some(pos) = self.cursor_position.get() {
                 if let Some(cursor) = &*self.cursor.borrow() {
                     if let Some(texture) = cursor.texture() {
-                        // don't take hotspot as an offset (it's not for hw cursor)
-                        if let Some((x, y)) = self.transform_pos_inv(pos.0 as _, pos.1 as _) {
+                        if let Some((x, y)) = self.transform_pos_inv(
+                            // do not take hotspot into account, at least for qemu.. to check with spice/vnc/rdp..
+                            pos.0 as _, pos.1 as _,
+                        ) {
                             let sf = self.obj().scale_factor();
 
                             snapshot.append_texture(
@@ -1375,7 +1377,7 @@ pub trait DisplayExt: 'static {
 
     fn set_mouse_absolute(&self, absolute: bool);
 
-    fn set_cursor_position(&self, pos: Option<(usize, usize)>);
+    fn set_cursor_position(&self, pos: Option<(i32, i32)>);
 
     fn grab_shortcut(&self) -> gtk::ShortcutTrigger;
 
@@ -1514,7 +1516,7 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
         glib::ObjectExt::set_property(self, "mouse-absolute", absolute);
     }
 
-    fn set_cursor_position(&self, pos: Option<(usize, usize)>) {
+    fn set_cursor_position(&self, pos: Option<(i32, i32)>) {
         // Safety: safe because IsA<Display>
         let self_: &Display = unsafe { self.unsafe_cast_ref::<Display>() };
 
@@ -1951,12 +1953,7 @@ mod ffi {
 
         pub fn rdw_display_define_cursor(dpy: *mut RdwDisplay, cursor: *const gdk::ffi::GdkCursor);
 
-        pub fn rdw_display_set_cursor_position(
-            dpy: *mut RdwDisplay,
-            enabled: bool,
-            x: usize,
-            y: usize,
-        );
+        pub fn rdw_display_set_cursor_position(dpy: *mut RdwDisplay, enabled: bool, x: i32, y: i32);
 
         pub fn rdw_display_update_area(
             dpy: *mut RdwDisplay,

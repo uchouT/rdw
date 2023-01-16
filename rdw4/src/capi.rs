@@ -82,8 +82,8 @@ pub extern "C" fn rdw_display_define_cursor(
 pub extern "C" fn rdw_display_set_cursor_position(
     dpy: *mut RdwDisplay,
     enabled: bool,
-    x: usize,
-    y: usize,
+    x: i32,
+    y: i32,
 ) {
     let this: &Display = unsafe { &from_glib_borrow(dpy) };
     let pos = enabled.then(|| (x, y));
