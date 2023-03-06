@@ -902,9 +902,8 @@ pub mod imp {
                 return false;
             }
 
-            let toplevel = match self.toplevel() {
-                Some(toplevel) => toplevel,
-                _ => return false,
+            let Some(toplevel) = self.toplevel() else {
+                return false;
             };
 
             toplevel.inhibit_system_shortcuts(None::<&gdk::ButtonEvent>);
