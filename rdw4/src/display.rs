@@ -45,10 +45,9 @@ impl std::fmt::Debug for RdwDisplay {
 #[cfg(not(feature = "bindings"))]
 pub mod imp {
     use super::*;
-    use crate::error::Error;
-    use crate::util;
     #[cfg(windows)]
     use crate::win32;
+    use crate::{error::Error, util};
     use gl::types::*;
     use glib::{clone, subclass::Signal, SourceId};
     use gtk::{graphene, subclass::prelude::*};
@@ -646,11 +645,9 @@ pub mod imp {
 
         #[cfg(windows)]
         fn realize_win32(&self, dpy: &gdk_win32::Win32Display) {
-            use windows::Win32::Devices::HumanInterfaceDevice::{
-                HID_USAGE_GENERIC_MOUSE, HID_USAGE_PAGE_GENERIC,
-            };
-            use windows::Win32::UI::Input::{
-                RegisterRawInputDevices, RAWINPUTDEVICE, RIDEV_INPUTSINK,
+            use windows::Win32::{
+                Devices::HumanInterfaceDevice::{HID_USAGE_GENERIC_MOUSE, HID_USAGE_PAGE_GENERIC},
+                UI::Input::{RegisterRawInputDevices, RAWINPUTDEVICE, RIDEV_INPUTSINK},
             };
 
             let Some(hwnd) = self.win32_handle() else {

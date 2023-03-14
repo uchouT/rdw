@@ -1,11 +1,16 @@
 #[cfg(not(feature = "bindings"))]
 mod imp {
     use gtk::prelude::*;
-    use windows::core::Result;
-    use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
-    use windows::Win32::UI::WindowsAndMessaging::{
-        SetWindowsHookExA, SystemParametersInfoA, UnhookWindowsHookEx, HHOOK, SPI_GETMOUSE,
-        SPI_GETMOUSESPEED, SPI_SETMOUSE, SPI_SETMOUSESPEED, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
+    use windows::{
+        core::Result,
+        Win32::{
+            Foundation::{LPARAM, LRESULT, WPARAM},
+            UI::WindowsAndMessaging::{
+                SetWindowsHookExA, SystemParametersInfoA, UnhookWindowsHookEx, HHOOK, SPI_GETMOUSE,
+                SPI_GETMOUSESPEED, SPI_SETMOUSE, SPI_SETMOUSESPEED,
+                SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
+            },
+        },
     };
 
     pub(crate) fn spi_set_mouse(mut mouse: [isize; 3]) -> Result<()> {
@@ -65,11 +70,15 @@ mod imp {
     }
 
     pub(crate) fn hook_keyboard() -> Result<HHOOK> {
-        use windows::Win32::System::LibraryLoader::GetModuleHandleA;
-        use windows::Win32::UI::Input::KeyboardAndMouse::*;
-        use windows::Win32::UI::WindowsAndMessaging::{
-            CallNextHookEx, GetForegroundWindow, SendMessageA, HC_ACTION, KBDLLHOOKSTRUCT,
-            WH_KEYBOARD_LL, WM_KEYUP,
+        use windows::Win32::{
+            System::LibraryLoader::GetModuleHandleA,
+            UI::{
+                Input::KeyboardAndMouse::*,
+                WindowsAndMessaging::{
+                    CallNextHookEx, GetForegroundWindow, SendMessageA, HC_ACTION, KBDLLHOOKSTRUCT,
+                    WH_KEYBOARD_LL, WM_KEYUP,
+                },
+            },
         };
 
         // code adapted from spice-gtk, seems to be doing ok..
@@ -121,9 +130,9 @@ mod imp {
     }
 
     pub(crate) fn hook_mouse() -> Result<HHOOK> {
-        use windows::Win32::System::LibraryLoader::GetModuleHandleA;
-        use windows::Win32::UI::WindowsAndMessaging::{
-            CallNextHookEx, HC_ACTION, WH_MOUSE_LL, WM_MOUSEMOVE,
+        use windows::Win32::{
+            System::LibraryLoader::GetModuleHandleA,
+            UI::WindowsAndMessaging::{CallNextHookEx, HC_ACTION, WH_MOUSE_LL, WM_MOUSEMOVE},
         };
 
         unsafe extern "system" fn hook(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {

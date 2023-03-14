@@ -116,8 +116,7 @@ fn read_char_attribute(major: u32, minor: u32, attribute: &str) -> std::io::Resu
 fn device_manufacturer_product(
     device: &rusb::Device<rusb::Context>,
 ) -> std::io::Result<(String, String)> {
-    use std::fs::*;
-    use std::os::unix::fs::MetadataExt;
+    use std::{fs::*, os::unix::fs::MetadataExt};
 
     let (bus, addr) = (device.bus_number(), device.address());
     let metadata = metadata(format!("/dev/bus/usb/{:03}/{:03}", bus, addr))?;
