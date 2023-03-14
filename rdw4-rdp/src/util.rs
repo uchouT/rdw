@@ -38,7 +38,6 @@ pub(crate) fn format_from_mime(format: &str) -> Option<freerdp::channels::cliprd
 pub(crate) fn string_from_utf16(data: Vec<u8>) -> Result<String, FromUtf16Error> {
     let utf16: Vec<u16> = data
         .chunks_exact(2)
-        .into_iter()
         .map(|a| u16::from_ne_bytes([a[0], a[1]]))
         .collect();
     String::from_utf16(&utf16)

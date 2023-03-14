@@ -1180,7 +1180,7 @@ pub mod imp {
                 let (sw, sh) = obj.display_size().unwrap();
                 let x = x * (vp.width() as f64 / sw as f64) + vp.x() as f64;
                 let y = y * (vp.height() as f64 / sh as f64) + vp.y() as f64;
-                (x / sf as f64, y / sf as f64)
+                (x / sf, y / sf)
             })
         }
 

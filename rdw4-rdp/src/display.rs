@@ -518,7 +518,7 @@ mod imp {
                         break;
                     }
                 }
-                let _ = thread.join().unwrap();
+                thread.join().unwrap();
                 this.tx.replace(None);
                 this.rx.replace(Some(rdp_event_rx));
                 if let Some(eodl) = this.eodl_tx.take() {

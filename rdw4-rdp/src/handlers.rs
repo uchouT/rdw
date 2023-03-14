@@ -173,12 +173,12 @@ impl freerdp::update::UpdateHandler for RdpUpdateHandler {
 
 #[derive(Debug)]
 pub(crate) struct RdpEncomspHandler {
-    context: RdpContextHandler,
+    _context: RdpContextHandler,
 }
 
 impl RdpEncomspHandler {
-    fn new(context: RdpContextHandler) -> Self {
-        Self { context }
+    fn new(_context: RdpContextHandler) -> Self {
+        Self { _context }
     }
 }
 
@@ -269,8 +269,7 @@ impl RdpContextHandler {
 
     fn send(&mut self, event: RdpEvent) -> Result<()> {
         let mut tx = self.tx.clone();
-        block_on(async move { tx.send(event).await })
-            .map_err(|e| RdpError::Failed(format!("{}", e)))?;
+        block_on(tx.send(event)).map_err(|e| RdpError::Failed(format!("{}", e)))?;
         Ok(())
     }
 
