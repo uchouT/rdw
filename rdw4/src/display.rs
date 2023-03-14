@@ -333,10 +333,10 @@ pub mod imp {
             self.obj().set_focus_on_click(true);
 
             let ec = gtk::EventControllerFocus::new();
-            self.obj().add_controller(&ec);
             ec.connect_leave(clone!(@weak self as this => @default-panic, move |_ec| {
                 this.release_keys();
             }));
+            self.obj().add_controller(ec);
 
             if self.realize_egl() {
                 if let Err(e) = unsafe { self.realize_gl() } {
@@ -358,7 +358,6 @@ pub mod imp {
 
             let ec = gtk::EventControllerKey::new();
             ec.set_propagation_phase(gtk::PropagationPhase::Capture);
-            self.obj().add_controller(&ec);
             ec.connect_key_pressed(
                 clone!(@weak self as this => @default-panic, move |ec, keyval, keycode, _state| {
                     this.key_pressed(ec, keyval, keycode);
@@ -370,9 +369,9 @@ pub mod imp {
                     this.key_released(keyval, keycode);
                 }),
             );
+            self.obj().add_controller(ec);
 
             let ec = gtk::EventControllerMotion::new();
-            self.obj().add_controller(&ec);
             ec.connect_motion(clone!(@weak self as this => move |_, x, y| {
                 if let Some((x, y)) = this.transform_pos(x, y) {
                     this.obj().emit_by_name::<()>("motion", &[&x, &y]);
@@ -388,10 +387,10 @@ pub mod imp {
                 this.ungrab_keyboard();
                 this.ungrab_mouse();
             }));
+            self.obj().add_controller(ec);
 
             let ec = gtk::GestureClick::new();
             ec.set_button(0);
-            self.obj().add_controller(&ec);
             ec.connect_pressed(
                 clone!(@weak self as this => @default-panic, move |gesture, _n_press, x, y| {
                     let grabbed = this.try_grab();
@@ -421,12 +420,12 @@ pub mod imp {
                 let button = gesture.current_button();
                 this.obj().emit_by_name::<()>("mouse-release", &[&button]);
             }));
+            self.obj().add_controller(ec);
 
             let ec = gtk::EventControllerScroll::new(
                 gtk::EventControllerScrollFlags::BOTH_AXES
                     | gtk::EventControllerScrollFlags::DISCRETE,
             );
-            self.obj().add_controller(&ec);
             ec.connect_scroll(
                 clone!(@weak self as this => @default-panic, move |_, dx, dy| {
                     if dy >= 1.0 {
@@ -442,6 +441,7 @@ pub mod imp {
                     glib::signal::Inhibit(false)
                 }),
             );
+            self.obj().add_controller(ec);
         }
 
         fn measure(&self, orientation: gtk::Orientation, _for_size: i32) -> (i32, i32, i32, i32) {
@@ -481,10 +481,10 @@ pub mod imp {
                     let height = height as u32 * sf;
                     let (w_mm, h_mm) = this.surface()
                                    .as_ref()
-                                   .map(|s| gdk::traits::DisplayExt::monitor_at_surface(&this.obj().display(), s))
-                                   .map(|m| {
+                                   .and_then(|s| gdk::traits::DisplayExt::monitor_at_surface(&this.obj().display(), s))
+                                   .and_then(|m| {
                                        let (geom, wmm, hmm) = (m.geometry(), m.width_mm() as u32, m.height_mm() as u32);
-                                       (wmm * width / (geom.width() as u32), hmm * height / geom.height() as u32)
+                                       Some((wmm * width / (geom.width() as u32), hmm * height / geom.height() as u32))
                                    }).unwrap_or((0u32, 0u32));
                     if Some((width, height, w_mm, h_mm)) != this.last_resize_request.get() {
                         this.last_resize_request.set(Some((width, height, w_mm, h_mm)));
@@ -925,10 +925,10 @@ pub mod imp {
                     this.key_released(keyval, keycode);
                 }),
             );
-            if let Some(root) = self.obj().root() {
-                root.add_controller(&ec);
-            }
             self.grab_ec.set(Some(&ec));
+            if let Some(root) = self.obj().root() {
+                root.add_controller(ec);
+            }
 
             let id = toplevel.connect_shortcuts_inhibited_notify(
                 clone!(@weak self as this => @default-panic, move |toplevel| {

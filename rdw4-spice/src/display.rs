@@ -601,7 +601,7 @@ glib::wrapper! {
 
 impl Display {
     pub fn new() -> Self {
-        glib::Object::new::<Self>(&[])
+        glib::Object::new::<Self>()
     }
 
     pub fn session(&self) -> &spice::Session {

@@ -176,7 +176,7 @@ impl GstAudio {
             .get_mut(&id)
             .ok_or_else(|| format!("Stream not found: {}", id))?;
         let mut stream = in_.sink.stream();
-        while in_.queue.len() < size as _ {
+        while in_.queue.len() < size as usize {
             let sample = stream.next().await.ok_or_else(|| "EOS?".to_string())?;
             let buffer = sample.buffer().ok_or_else(|| "No buffer?".to_string())?;
             let mut cursor = buffer.as_cursor_readable();

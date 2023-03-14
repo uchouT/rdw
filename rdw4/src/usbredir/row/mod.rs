@@ -9,7 +9,7 @@ glib::wrapper! {
 
 impl Row {
     pub(crate) fn new(device: &Device) -> Self {
-        glib::Object::new::<Self>(&[("device", device)])
+        glib::Object::builder().property("device", device).build()
     }
 
     pub(crate) fn switch(&self) -> &gtk::Switch {

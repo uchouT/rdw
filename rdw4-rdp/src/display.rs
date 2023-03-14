@@ -257,7 +257,7 @@ mod imp {
             self.keymap.set(rdw::keymap_xtkbd());
 
             let ec = gtk::EventControllerScroll::new(gtk::EventControllerScrollFlags::BOTH_AXES);
-            self.obj().add_controller(&ec);
+            self.obj().add_controller(ec);
             ec.connect_scroll(
                 clone!(@weak self as this => @default-panic, move |_, dx, dy| {
                     MainContext::default().spawn_local(glib::clone!(@weak this => async move {
@@ -717,7 +717,7 @@ glib::wrapper! {
 
 impl Display {
     pub fn new() -> Self {
-        glib::Object::new::<Self>(&[])
+        glib::Object::new::<Self>()
     }
 
     pub fn with_settings(
