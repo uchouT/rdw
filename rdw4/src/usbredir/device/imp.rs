@@ -3,7 +3,6 @@ use std::cell::{Cell, RefCell};
 use glib::{subclass::Signal, ParamSpec};
 use gtk::{glib, prelude::*, subclass::prelude::*};
 use once_cell::sync::Lazy;
-use std::convert::TryFrom;
 use usbredirhost::rusb;
 
 #[derive(Default, glib::Properties)]

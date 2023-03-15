@@ -1,5 +1,3 @@
-use std::convert::TryFrom;
-
 use glib::{clone, signal::SignalHandlerId, subclass::prelude::*};
 use gtk::{gdk, gio, glib, prelude::*};
 use rdw::{gtk, DisplayExt};

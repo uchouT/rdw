@@ -5,7 +5,6 @@ use once_cell::sync::Lazy;
 use rusb::UsbContext;
 use std::{
     cell::{Cell, RefCell},
-    convert::TryFrom,
     thread,
 };
 use usbredirhost::rusb;
