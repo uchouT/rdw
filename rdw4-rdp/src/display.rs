@@ -91,7 +91,8 @@ mod imp {
         type Type = Display;
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, glib::Properties)]
+    #[properties(wrapper_type = super::Display)]
     pub struct Display {
         pub(crate) context: Arc<Mutex<Box<Context<RdpContextHandler>>>>,
         state: RefCell<Option<RdpEvent>>,
@@ -101,6 +102,12 @@ mod imp {
         last_mouse: Cell<(f64, f64)>,
         clipboard: Clipboard,
         keymap: Cell<Option<&'static [u16]>>,
+        #[property(
+            get,
+            name = "rdp-connected",
+            nick = "RDP connected",
+            blurb = "Whether the RDP connection is up and running"
+        )]
         connected: Cell<bool>,
         eodl_tx: RefCell<Option<oneshot::Sender<()>>>,
     }
@@ -143,25 +150,11 @@ mod imp {
 
     impl ObjectImpl for Display {
         fn properties() -> &'static [glib::ParamSpec] {
-            use glib::ParamFlags as Flags;
-
-            static PROPERTIES: Lazy<Vec<glib::ParamSpec>> = Lazy::new(|| {
-                vec![glib::ParamSpecBoolean::new(
-                    "rdp-connected",
-                    "RDP connected",
-                    "Whether the RDP connection is up and running",
-                    false,
-                    Flags::READABLE,
-                )]
-            });
-            PROPERTIES.as_ref()
+            Self::derived_properties()
         }
 
-        fn property(&self, _id: usize, pspec: &glib::ParamSpec) -> glib::Value {
-            match pspec.name() {
-                "rdp-connected" => self.connected.get().to_value(),
-                _ => unimplemented!(),
-            }
+        fn property(&self, id: usize, pspec: &glib::ParamSpec) -> glib::Value {
+            self.derived_property(id, pspec)
         }
 
         fn signals() -> &'static [Signal] {

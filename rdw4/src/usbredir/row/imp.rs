@@ -1,18 +1,25 @@
-use std::cell::RefCell;
-
-use glib::{clone, ParamSpec, ParamSpecObject};
+use glib::{clone, ParamSpec};
 use gtk::{glib, prelude::*, subclass::prelude::*, CompositeTemplate};
-use once_cell::sync::Lazy;
+use once_cell::sync::OnceCell;
+use std::convert::TryFrom;
 
-#[derive(Debug, Default, CompositeTemplate)]
+#[derive(Debug, Default, glib::Properties, CompositeTemplate)]
 #[template(file = "row.ui")]
+#[properties(wrapper_type = super::Row)]
 pub struct Row {
     #[template_child]
     pub label: TemplateChild<gtk::Label>,
     #[template_child]
     pub switch: TemplateChild<gtk::Switch>,
 
-    pub device: RefCell<Option<super::Device>>,
+    #[property(
+        get,
+        set,
+        construct_only,
+        nick = "Device",
+        blurb = "The associated device"
+    )]
+    pub device: OnceCell<super::Device>,
 }
 
 #[glib::object_subclass]
@@ -32,63 +39,39 @@ impl ObjectSubclass for Row {
 
 impl ObjectImpl for Row {
     fn properties() -> &'static [ParamSpec] {
-        static PROPERTIES: Lazy<Vec<ParamSpec>> = Lazy::new(|| {
-            vec![ParamSpecObject::new(
-                "device",
-                "Device",
-                "The associated device",
-                super::Device::static_type(),
-                glib::ParamFlags::READWRITE | glib::ParamFlags::CONSTRUCT_ONLY,
-            )]
-        });
-        PROPERTIES.as_ref()
+        Self::derived_properties()
     }
 
-    fn set_property(&self, _id: usize, value: &glib::Value, pspec: &glib::ParamSpec) {
-        match pspec.name() {
-            "device" => {
-                let device = value
-                    .get()
-                    .expect("type conformity checked by 'Object::set_property'");
-                self.device.replace(device);
-            }
-            _ => unimplemented!(),
-        }
+    fn set_property(&self, id: usize, value: &glib::Value, pspec: &glib::ParamSpec) {
+        self.derived_set_property(id, value, pspec)
     }
 
-    fn property(&self, _id: usize, pspec: &glib::ParamSpec) -> glib::Value {
-        match pspec.name() {
-            "device" => self.device.borrow().to_value(),
-            _ => unimplemented!(),
-        }
+    fn property(&self, id: usize, pspec: &glib::ParamSpec) -> glib::Value {
+        self.derived_property(id, pspec)
     }
 
     fn constructed(&self) {
         self.parent_constructed();
 
-        if let Some(device) = &*self.device.borrow() {
-            device
-                .bind_property("name", &*self.label, "label")
-                .flags(glib::BindingFlags::DEFAULT | glib::BindingFlags::SYNC_CREATE)
-                .build();
-            device
-                .bind_property("active", &*self.switch, "active")
-                .flags(glib::BindingFlags::DEFAULT | glib::BindingFlags::SYNC_CREATE)
-                .build();
-            // because we are waiting for state changes
-            device
-                .bind_property("active", &*self.switch, "state")
-                .flags(glib::BindingFlags::DEFAULT | glib::BindingFlags::SYNC_CREATE)
-                .build();
-        }
+        let device = self.obj().device();
+        device
+            .bind_property("name", &*self.label, "label")
+            .flags(glib::BindingFlags::DEFAULT | glib::BindingFlags::SYNC_CREATE)
+            .build();
+        device
+            .bind_property("active", &*self.switch, "active")
+            .flags(glib::BindingFlags::DEFAULT | glib::BindingFlags::SYNC_CREATE)
+            .build();
+        // because we are waiting for state changes
+        device
+            .bind_property("active", &*self.switch, "state")
+            .flags(glib::BindingFlags::DEFAULT | glib::BindingFlags::SYNC_CREATE)
+            .build();
 
         self.switch.connect_state_set(
-            clone!(@weak self as this => @default-panic, move |s, state| {
-                if let Some(device) = &*this.device.borrow() {
-                    device.emit_by_name::<()>("state-set", &[&state]);
-                } else {
-                    s.set_state(false);
-                }
+            clone!(@weak self as this => @default-panic, move |_s, state| {
+                let device = this.obj().device();
+                device.emit_by_name::<()>("state-set", &[&state]);
                 gtk::Inhibit(true)
             }),
         );

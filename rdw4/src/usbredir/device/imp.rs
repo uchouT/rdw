@@ -1,14 +1,18 @@
 use std::cell::{Cell, RefCell};
 
-use glib::{subclass::Signal, ParamFlags, ParamSpec, ParamSpecBoolean, ParamSpecString};
+use glib::{subclass::Signal, ParamSpec};
 use gtk::{glib, prelude::*, subclass::prelude::*};
 use once_cell::sync::Lazy;
+use std::convert::TryFrom;
 use usbredirhost::rusb;
 
-#[derive(Default)]
+#[derive(Default, glib::Properties)]
+#[properties(wrapper_type = super::Device)]
 pub struct Device {
     pub device: RefCell<Option<rusb::Device<rusb::Context>>>,
+    #[property(get, set, nick = "Name", blurb = "The device name")]
     pub name: RefCell<String>,
+    #[property(get, set, nick = "Active", blurb = "Device is redirected")]
     pub active: Cell<bool>,
 }
 
@@ -21,45 +25,15 @@ impl ObjectSubclass for Device {
 
 impl ObjectImpl for Device {
     fn properties() -> &'static [ParamSpec] {
-        static PROPERTIES: Lazy<Vec<ParamSpec>> = Lazy::new(|| {
-            vec![
-                ParamSpecString::new(
-                    "name",
-                    "Name",
-                    "The device name",
-                    None,
-                    ParamFlags::READWRITE,
-                ),
-                ParamSpecBoolean::new(
-                    "active",
-                    "Active",
-                    "Device is redirected",
-                    false,
-                    ParamFlags::READWRITE,
-                ),
-            ]
-        });
-        PROPERTIES.as_ref()
+        Self::derived_properties()
     }
 
-    fn property(&self, _id: usize, pspec: &glib::ParamSpec) -> glib::Value {
-        match pspec.name() {
-            "name" => self.name.borrow().to_value(),
-            "active" => self.active.get().to_value(),
-            _ => unimplemented!(),
-        }
+    fn property(&self, id: usize, pspec: &glib::ParamSpec) -> glib::Value {
+        self.derived_property(id, pspec)
     }
 
-    fn set_property(&self, _id: usize, value: &glib::Value, pspec: &ParamSpec) {
-        match pspec.name() {
-            "name" => {
-                self.name.replace(value.get().unwrap());
-            }
-            "active" => {
-                self.active.set(value.get().unwrap());
-            }
-            _ => unimplemented!(),
-        }
+    fn set_property(&self, id: usize, value: &glib::Value, pspec: &ParamSpec) {
+        self.derived_set_property(id, value, pspec)
     }
 
     fn signals() -> &'static [Signal] {
@@ -73,15 +47,11 @@ impl ObjectImpl for Device {
 }
 
 impl Device {
-    pub fn set_name(&self, name: &str) {
-        self.obj().set_property("name", name)
-    }
-
     pub fn set_device(&self, device: rusb::Device<rusb::Context>) {
         if let Ok((manufacturer, product)) = device_manufacturer_product(&device) {
-            self.set_name(&format!("{} {}", manufacturer, product));
+            self.obj().set_name(format!("{} {}", manufacturer, product));
         } else {
-            self.set_name(&format!(
+            self.obj().set_name(format!(
                 "Bus {:03} Device {:03}",
                 device.bus_number(),
                 device.address()

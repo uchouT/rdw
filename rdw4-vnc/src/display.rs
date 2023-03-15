@@ -9,7 +9,6 @@ mod imp {
     use super::*;
     use crate::framebuffer::*;
     use gtk::subclass::prelude::*;
-    use once_cell::sync::Lazy;
     use std::{
         cell::{Cell, RefCell},
         convert::TryInto,
@@ -41,8 +40,10 @@ mod imp {
         type Type = Display;
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, glib::Properties)]
+    #[properties(wrapper_type = super::Display)]
     pub struct Display {
+        #[property(get, nick = "Connection", blurb = "gvnc connection")]
         pub(crate) connection: gvnc::Connection,
         pub(crate) fb: RefCell<Option<Framebuffer>>,
         pub(crate) keycode_map: bool,
@@ -77,32 +78,11 @@ mod imp {
 
     impl ObjectImpl for Display {
         fn properties() -> &'static [glib::ParamSpec] {
-            use glib::ParamFlags as Flags;
-
-            static PROPERTIES: Lazy<Vec<glib::ParamSpec>> = Lazy::new(|| {
-                vec![glib::ParamSpecObject::new(
-                    "connection",
-                    "Connection",
-                    "gvnc connection",
-                    gvnc::Connection::static_type(),
-                    Flags::READABLE,
-                )]
-            });
-            PROPERTIES.as_ref()
+            Self::derived_properties()
         }
 
-        fn set_property(&self, _id: usize, _value: &glib::Value, pspec: &glib::ParamSpec) {
-            match pspec.name() {
-                "connection" => panic!(),
-                _ => unimplemented!(),
-            }
-        }
-
-        fn property(&self, _id: usize, pspec: &glib::ParamSpec) -> glib::Value {
-            match pspec.name() {
-                "connection" => self.connection.to_value(),
-                _ => unimplemented!(),
-            }
+        fn property(&self, id: usize, pspec: &glib::ParamSpec) -> glib::Value {
+            self.derived_property(id, pspec)
         }
 
         fn constructed(&self) {
@@ -438,12 +418,6 @@ glib::wrapper! {
 impl Display {
     pub fn new() -> Self {
         glib::Object::new::<Self>()
-    }
-
-    pub fn connection(&self) -> &gvnc::Connection {
-        let imp = imp::Display::from_obj(self);
-
-        &imp.connection
     }
 }
 

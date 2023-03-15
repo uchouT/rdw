@@ -212,41 +212,29 @@ pub mod imp {
         }
 
         fn properties() -> &'static [glib::ParamSpec] {
-            use glib::ParamFlags as Flags;
-
             static PROPERTIES: Lazy<Vec<glib::ParamSpec>> = Lazy::new(|| {
                 vec![
-                    glib::ParamSpecObject::new(
-                        "grab-shortcut",
-                        "Grab shortcut",
-                        "Input devices grab/ungrab shortcut",
-                        gtk::ShortcutTrigger::static_type(),
-                        Flags::READWRITE,
-                    ),
-                    glib::ParamSpecFlags::new(
-                        "grabbed",
-                        "grabbed",
-                        "Grabbed",
-                        Grab::static_type(),
-                        Grab::empty().into_glib(),
-                        Flags::READABLE,
-                    ),
-                    glib::ParamSpecUInt::new(
-                        "synthesize-delay",
-                        "Synthesize delay",
-                        "Press-and-release synthesize maximum time in ms",
-                        u32::MIN,
-                        u32::MAX,
-                        100,
-                        Flags::READWRITE | Flags::CONSTRUCT,
-                    ),
-                    glib::ParamSpecBoolean::new(
-                        "mouse-absolute",
-                        "Mouse absolute",
-                        "Whether the mouse is absolute or relative",
-                        false,
-                        Flags::READWRITE | Flags::CONSTRUCT,
-                    ),
+                    glib::ParamSpecObject::builder::<gtk::ShortcutTrigger>("grab-shortcut")
+                        .nick("Grab shortcut")
+                        .blurb("Input devices grab/ungrab shortcut")
+                        .build(),
+                    glib::ParamSpecFlags::builder::<Grab>("grabbed")
+                        .nick("grabbed")
+                        .blurb("Grabbed")
+                        .read_only()
+                        .default_value(Grab::empty())
+                        .build(),
+                    glib::ParamSpecUInt::builder("synthesize-delay")
+                        .nick("Synthesize delay")
+                        .blurb("Press-and-release synthesize maximum time in ms")
+                        .default_value(100)
+                        .construct()
+                        .build(),
+                    glib::ParamSpecBoolean::builder("mouse-absolute")
+                        .nick("Mouse absolute")
+                        .blurb("Whether the mouse is absolute or relative")
+                        .construct()
+                        .build(),
                 ]
             });
             PROPERTIES.as_ref()
@@ -482,9 +470,9 @@ pub mod imp {
                     let (w_mm, h_mm) = this.surface()
                                    .as_ref()
                                    .and_then(|s| gdk::traits::DisplayExt::monitor_at_surface(&this.obj().display(), s))
-                                   .and_then(|m| {
+                                   .map(|m| {
                                        let (geom, wmm, hmm) = (m.geometry(), m.width_mm() as u32, m.height_mm() as u32);
-                                       Some((wmm * width / (geom.width() as u32), hmm * height / geom.height() as u32))
+                                       (wmm * width / (geom.width() as u32), hmm * height / geom.height() as u32)
                                    }).unwrap_or((0u32, 0u32));
                     if Some((width, height, w_mm, h_mm)) != this.last_resize_request.get() {
                         this.last_resize_request.set(Some((width, height, w_mm, h_mm)));

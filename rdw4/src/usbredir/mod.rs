@@ -2,7 +2,7 @@ use glib::{
     object::{Cast, ObjectExt, ObjectType as ObjectType_},
     signal::{connect_raw, SignalHandlerId},
     translate::*,
-    StaticType, ToValue,
+    StaticType,
 };
 use gtk::{gio, glib, prelude::*, subclass::prelude::*};
 use std::{boxed::Box as Box_, mem::transmute};

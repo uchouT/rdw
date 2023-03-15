@@ -1,10 +1,11 @@
 use super::*;
-use glib::{clone, subclass::Signal, ParamSpec, ParamSpecInt};
+use glib::{clone, subclass::Signal, ParamSpec};
 use gtk::CompositeTemplate;
 use once_cell::sync::Lazy;
 use rusb::UsbContext;
 use std::{
     cell::{Cell, RefCell},
+    convert::TryFrom,
     thread,
 };
 use usbredirhost::rusb;
@@ -98,8 +99,9 @@ unsafe impl InstanceStruct for RdwUsbRedir {
     type Type = UsbRedir;
 }
 
-#[derive(Debug, CompositeTemplate)]
+#[derive(Debug, glib::Properties, CompositeTemplate)]
 #[template(file = "usbredir.ui")]
+#[properties(wrapper_type = super::UsbRedir)]
 pub struct UsbRedir {
     #[template_child]
     pub listbox: TemplateChild<gtk::ListBox>,
@@ -116,7 +118,7 @@ pub struct UsbRedir {
     pub model: gio::ListStore,
 
     ctxt: RefCell<Option<RdwUsbContext>>,
-
+    #[property(get, set = Self::set_free_channels, nick = "Free channels", blurb = "Number of free channels", minimum = -1, default = -1)]
     free_channels: Cell<i32>,
 }
 
@@ -155,37 +157,15 @@ impl ObjectImpl for UsbRedir {
     fn constructed(&self) {}
 
     fn properties() -> &'static [ParamSpec] {
-        static PROPERTIES: Lazy<Vec<ParamSpec>> = Lazy::new(|| {
-            vec![ParamSpecInt::new(
-                "free-channels",
-                "Free channels",
-                "Number of free channels",
-                -1,
-                i32::MAX,
-                -1,
-                glib::ParamFlags::READWRITE,
-            )]
-        });
-        PROPERTIES.as_ref()
+        Self::derived_properties()
     }
 
-    fn property(&self, _id: usize, pspec: &glib::ParamSpec) -> glib::Value {
-        match pspec.name() {
-            "free-channels" => self.free_channels.get().to_value(),
-            _ => unimplemented!(),
-        }
+    fn property(&self, id: usize, pspec: &glib::ParamSpec) -> glib::Value {
+        self.derived_property(id, pspec)
     }
 
-    fn set_property(&self, _id: usize, value: &glib::Value, pspec: &ParamSpec) {
-        match pspec.name() {
-            "free-channels" => {
-                let n = value.get().unwrap();
-                self.free_channels.set(n);
-                self.free_label.set_label(&format!("({} free channels)", n));
-                self.free_label.set_visible(n >= 0);
-            }
-            _ => unimplemented!(),
-        }
+    fn set_property(&self, id: usize, value: &glib::Value, pspec: &ParamSpec) {
+        self.derived_set_property(id, value, pspec)
     }
 
     fn signals() -> &'static [Signal] {
@@ -263,6 +243,12 @@ impl WidgetImpl for UsbRedir {
 }
 
 impl UsbRedir {
+    fn set_free_channels(&self, n: i32) {
+        self.free_channels.set(n);
+        self.free_label.set_label(&format!("({} free channels)", n));
+        self.free_label.set_visible(n >= 0);
+    }
+
     pub fn find_item<F: Fn(&Device) -> bool>(&self, test: F) -> Option<u32> {
         let mut pos = 0;
         loop {

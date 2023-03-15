@@ -12,7 +12,6 @@ mod imp {
     use super::*;
     use crate::util;
     use gtk::subclass::prelude::*;
-    use once_cell::sync::Lazy;
     use std::cell::{Cell, RefCell};
 
     #[repr(C)]
@@ -52,9 +51,11 @@ mod imp {
         >,
     }
 
-    #[derive(Default)]
+    #[derive(Default, glib::Properties)]
+    #[properties(wrapper_type = super::Display)]
     pub struct Display {
         pub(crate) keymap: Cell<Option<&'static [u16]>>,
+        #[property(get, nick = "Session", blurb = "Spice client session")]
         pub(crate) session: spice::Session,
         pub(crate) monitor_config: Cell<Option<spice::DisplayMonitorConfig>>,
         pub(crate) main: glib::WeakRef<spice::MainChannel>,
@@ -76,32 +77,11 @@ mod imp {
 
     impl ObjectImpl for Display {
         fn properties() -> &'static [glib::ParamSpec] {
-            use glib::ParamFlags as Flags;
-
-            static PROPERTIES: Lazy<Vec<glib::ParamSpec>> = Lazy::new(|| {
-                vec![glib::ParamSpecObject::new(
-                    "session",
-                    "Session",
-                    "Spice client session",
-                    spice::Session::static_type(),
-                    Flags::READABLE,
-                )]
-            });
-            PROPERTIES.as_ref()
+            Self::derived_properties()
         }
 
-        fn set_property(&self, _id: usize, _value: &glib::Value, pspec: &glib::ParamSpec) {
-            match pspec.name() {
-                "session" => panic!(),
-                _ => unimplemented!(),
-            }
-        }
-
-        fn property(&self, _id: usize, pspec: &glib::ParamSpec) -> glib::Value {
-            match pspec.name() {
-                "session" => self.session.to_value(),
-                _ => unimplemented!(),
-            }
+        fn property(&self, id: usize, pspec: &glib::ParamSpec) -> glib::Value {
+            self.derived_property(id, pspec)
         }
 
         fn constructed(&self) {
@@ -602,12 +582,6 @@ glib::wrapper! {
 impl Display {
     pub fn new() -> Self {
         glib::Object::new::<Self>()
-    }
-
-    pub fn session(&self) -> &spice::Session {
-        let imp = imp::Display::from_obj(self);
-
-        &imp.session
     }
 }
 
