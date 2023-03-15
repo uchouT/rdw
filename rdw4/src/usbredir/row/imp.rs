@@ -28,7 +28,7 @@ impl ObjectSubclass for Row {
     type ParentType = gtk::Widget;
 
     fn class_init(klass: &mut Self::Class) {
-        Self::bind_template(klass);
+        klass.bind_template();
     }
 
     fn instance_init(obj: &glib::subclass::InitializingObject<Self>) {
@@ -55,16 +55,16 @@ impl ObjectImpl for Row {
         let device = self.obj().device();
         device
             .bind_property("name", &*self.label, "label")
-            .flags(glib::BindingFlags::DEFAULT | glib::BindingFlags::SYNC_CREATE)
+            .sync_create()
             .build();
         device
             .bind_property("active", &*self.switch, "active")
-            .flags(glib::BindingFlags::DEFAULT | glib::BindingFlags::SYNC_CREATE)
+            .sync_create()
             .build();
         // because we are waiting for state changes
         device
             .bind_property("active", &*self.switch, "state")
-            .flags(glib::BindingFlags::DEFAULT | glib::BindingFlags::SYNC_CREATE)
+            .sync_create()
             .build();
 
         self.switch.connect_state_set(

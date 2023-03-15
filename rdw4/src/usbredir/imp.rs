@@ -144,7 +144,7 @@ impl ObjectSubclass for UsbRedir {
     type Instance = RdwUsbRedir;
 
     fn class_init(klass: &mut Self::Class) {
-        Self::bind_template(klass);
+        klass.bind_template();
     }
 
     fn instance_init(obj: &glib::subclass::InitializingObject<Self>) {
@@ -177,7 +177,7 @@ impl ObjectImpl for UsbRedir {
                     .return_type_from(bool::static_type())
                     .class_handler(|_token, args| {
                         let inst = args[0].get::<super::UsbRedir>().unwrap();
-                        let imp = UsbRedir::from_obj(&inst);
+                        let imp = inst.imp();
                         let msg: String = args[1].get().unwrap();
                         imp.error_label.set_label(&msg);
                         imp.infobar.set_revealed(true);

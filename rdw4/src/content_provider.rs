@@ -100,7 +100,7 @@ impl ContentProvider {
         write_future: F,
     ) -> Self {
         let obj = glib::Object::new::<Self>();
-        let imp = imp::ContentProvider::from_obj(&obj);
+        let imp = obj.imp();
 
         let mut formats = gdk::ContentFormatsBuilder::new();
         for m in mime_types {

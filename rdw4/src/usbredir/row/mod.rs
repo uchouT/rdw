@@ -1,7 +1,7 @@
 mod imp;
 
 use super::Device;
-use gtk::{glib, subclass::prelude::ObjectSubclassExt};
+use gtk::{glib, subclass::prelude::*};
 
 glib::wrapper! {
     pub struct Row(ObjectSubclass<imp::Row>) @extends gtk::Widget;
@@ -13,7 +13,6 @@ impl Row {
     }
 
     pub(crate) fn switch(&self) -> &gtk::Switch {
-        let imp = imp::Row::from_obj(self);
-        &imp.switch
+        &self.imp().switch
     }
 }

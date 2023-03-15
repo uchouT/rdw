@@ -1422,9 +1422,7 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
         }
         #[cfg(not(feature = "bindings"))]
         {
-            let imp = imp::Display::from_obj(self_);
-
-            imp.display_size.get()
+            self_.imp().display_size.get()
         }
     }
 
@@ -1443,7 +1441,7 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
         }
         #[cfg(not(feature = "bindings"))]
         {
-            let imp = imp::Display::from_obj(self_);
+            let imp = self_.imp();
 
             if self.display_size() == size {
                 return;
@@ -1487,7 +1485,7 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
         }
         #[cfg(not(feature = "bindings"))]
         {
-            let imp = imp::Display::from_obj(self_);
+            let imp = self_.imp();
             if self.mouse_absolute() {
                 imp.gl_area().set_cursor(cursor.as_ref());
             }
@@ -1517,9 +1515,7 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
         }
         #[cfg(not(feature = "bindings"))]
         {
-            let imp = imp::Display::from_obj(self_);
-
-            imp.cursor_position.set(pos);
+            self_.imp().cursor_position.set(pos);
             self.queue_draw();
         }
     }
@@ -1542,7 +1538,7 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
         }
         #[cfg(not(feature = "bindings"))]
         {
-            let imp = imp::Display::from_obj(self_);
+            let imp = self_.imp();
             let _ctx = imp.make_current();
 
             // TODO: check data boundaries
@@ -1581,7 +1577,7 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
         }
         #[cfg(all(unix, not(feature = "bindings")))]
         {
-            let imp = imp::Display::from_obj(self_);
+            let imp = self_.imp();
             let _ctx = imp.make_current();
 
             let egl = egl::egl();
@@ -1660,7 +1656,7 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
         }
         #[cfg(not(feature = "bindings"))]
         {
-            let imp = imp::Display::from_obj(self_);
+            let imp = self_.imp();
             let _ctx = imp.make_current();
 
             unsafe {
