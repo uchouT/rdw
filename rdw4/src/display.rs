@@ -1907,15 +1907,7 @@ pub trait DisplayImplExt: ObjectSubclass {}
 
 impl<T: DisplayImpl> DisplayImplExt for T {}
 
-unsafe impl<T: DisplayImpl> IsSubclassable<T> for Display {
-    fn class_init(class: &mut glib::Class<Self>) {
-        <gtk::Widget as IsSubclassable<T>>::class_init(class);
-    }
-
-    fn instance_init(instance: &mut glib::subclass::InitializingObject<T>) {
-        <gtk::Widget as IsSubclassable<T>>::instance_init(instance);
-    }
-}
+unsafe impl<T: DisplayImpl> IsSubclassable<T> for Display {}
 
 #[cfg(not(feature = "bindings"))]
 glib::wrapper! {

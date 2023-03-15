@@ -153,8 +153,6 @@ impl ObjectSubclass for UsbRedir {
 }
 
 impl ObjectImpl for UsbRedir {
-    fn constructed(&self) {}
-
     fn properties() -> &'static [ParamSpec] {
         Self::derived_properties()
     }
