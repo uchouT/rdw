@@ -18,7 +18,7 @@ Rust bindings are either new or in active development (gtk-rs, gstreamer-rs, fre
 
 ## Dependencies
 
-gtk4, gstreamer, gtk-vnc, spice-gtk, freerdp2..
+gtk4, gstreamer, gtk-vnc, spice-gtk, freerdp2, [cargo-c](https://crates.io/crates/cargo-c)..
 
 ## Building
 
