@@ -266,6 +266,9 @@ mod imp {
                                 this.obj().render();
                                 let _ = wait_tx.send(());
                             }
+                            Disable => {
+                                log::warn!("Display disabled");
+                            }
                             Disconnected => {
                                 log::warn!("Console disconnected");
                             }
@@ -340,6 +343,7 @@ enum ConsoleEvent {
         _update: qemu_display::UpdateDMABUF,
         wait_tx: futures::channel::oneshot::Sender<()>,
     },
+    Disable,
     MouseSet(qemu_display::MouseSet),
     CursorDefine(qemu_display::Cursor),
     Disconnected,
@@ -389,6 +393,10 @@ impl ConsoleListenerHandler for ConsoleHandler {
         if let Err(e) = wait_rx.await {
             log::warn!("wait update dmabuf failed: {}", e);
         }
+    }
+
+    async fn disable(&mut self) {
+        self.send(ConsoleEvent::Disable);
     }
 
     async fn mouse_set(&mut self, set: qemu_display::MouseSet) {
