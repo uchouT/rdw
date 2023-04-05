@@ -116,7 +116,7 @@ mod imp {
 
             self.obj()
                 .connect_motion(clone!(@weak self as this => move |_, x, y| {
-                    log::debug!("motion: {:?}", (x, y));
+                    log::trace!("motion: {:?}", (x, y));
                     MainContext::default().spawn_local(clone!(@weak this => async move {
                         if !this.obj().console().mouse.is_absolute().await.unwrap_or(false) {
                             return;
@@ -129,7 +129,7 @@ mod imp {
 
             self.obj()
                 .connect_motion_relative(clone!(@weak self as this => move |_, dx, dy| {
-                    log::debug!("motion-relative: {:?}", (dx, dy));
+                    log::trace!("motion-relative: {:?}", (dx, dy));
                     MainContext::default().spawn_local(clone!(@weak this => async move {
                         let _ = this.obj().console().mouse.rel_motion(dx.round() as _, dy.round() as _).await;
                     }));
@@ -250,6 +250,7 @@ mod imp {
                             }
                             #[cfg(unix)]
                             ScanoutDMABUF(s) => {
+                                log::trace!("{s:?}");
                                 this.obj().set_display_size(Some((s.width as _, s.height as _)));
                                 this.obj().set_dmabuf_scanout(rdw::RdwDmabufScanout {
                                     width: s.width,
