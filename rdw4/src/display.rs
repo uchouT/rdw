@@ -59,8 +59,6 @@ pub mod imp {
     };
     #[cfg(windows)]
     use windows::Win32::UI::WindowsAndMessaging::HHOOK;
-    #[cfg(unix)]
-    use x11::xlib;
 
     unsafe impl ClassStruct for RdwDisplayClass {
         type Type = Display;
@@ -95,13 +93,6 @@ pub mod imp {
         pub(crate) grabbed: Cell<Grab>,
         pub(crate) shortcuts_inhibited_id: Cell<Option<SignalHandlerId>>,
         pub(crate) grab_ec: glib::WeakRef<gtk::EventControllerKey>,
-
-        #[cfg(unix)]
-        pub(crate) egl_ctx: OnceCell<egl::Context>,
-        #[cfg(unix)]
-        pub(crate) egl_cfg: OnceCell<egl::Config>,
-        #[cfg(unix)]
-        pub(crate) egl_surf: OnceCell<egl::Surface>,
 
         pub(crate) texture_id: Cell<GLuint>,
         pub(crate) texture_blit_vao: Cell<GLuint>,
@@ -326,13 +317,7 @@ pub mod imp {
             }));
             self.obj().add_controller(ec);
 
-            if self.realize_egl() {
-                if let Err(e) = unsafe { self.realize_gl() } {
-                    log::warn!("Failed to realize GL: {}", e);
-                }
-            } else {
-                self.gl_area().set_parent(&*self.obj());
-            }
+            self.gl_area().set_parent(&*self.obj());
 
             #[cfg(unix)]
             if let Ok(dpy) = self.obj().display().downcast::<gdk_wl::WaylandDisplay>() {
@@ -520,78 +505,11 @@ pub mod imp {
         }
     }
 
-    pub(crate) struct ContextGuard<'a>(&'a Display);
-
-    impl Drop for ContextGuard<'_> {
-        fn drop(&mut self) {
-            self.0.clear_current();
-        }
-    }
-
     impl Display {
-        pub(crate) fn clear_current(&self) {
-            #[cfg(unix)]
-            if let (Some(dpy), Some(_)) = (self.egl_display(), self.egl_surface()) {
-                let _ = egl::egl().make_current(dpy, None, None, None);
-            }
-        }
-
-        fn make_current_gl_area(&self) {
+        pub(crate) fn make_current(&self) {
             let area = self.gl_area();
             area.make_current();
             area.attach_buffers();
-        }
-
-        pub(crate) fn make_current(&self) -> ContextGuard {
-            #[cfg(unix)]
-            if let (Some(dpy), surf, Some(ctx)) =
-                (self.egl_display(), self.egl_surface(), self.egl_context())
-            {
-                gdk::GLContext::clear_current();
-                if let Err(e) = egl::egl().make_current(dpy, surf, surf, Some(ctx)) {
-                    log::warn!("Failed to make current context: {}", e);
-                }
-            } else {
-                self.make_current_gl_area();
-            }
-
-            #[cfg(not(unix))]
-            self.make_current_gl_area();
-
-            ContextGuard(self)
-        }
-
-        #[cfg(not(unix))]
-        fn realize_egl(&self) -> bool {
-            false
-        }
-
-        #[cfg(unix)]
-        fn realize_egl(&self) -> bool {
-            // necessary on X11 to have an EGL context for dmabuf imports
-            if let (Some(dpy), Some(_), Some(xid)) =
-                (self.egl_display(), self.egl_context(), self.x11_xid())
-            {
-                match unsafe {
-                    egl::egl().create_window_surface(
-                        dpy,
-                        *self.egl_cfg.get().expect("egl config missing"),
-                        xid as _,
-                        None,
-                    )
-                } {
-                    Ok(surf) => {
-                        log::debug!("Initialized EGL surface successfully");
-                        self.egl_surf.set(surf).unwrap();
-                    }
-                    Err(e) => {
-                        log::warn!("Failed to create egl surface: {}", e);
-                    }
-                }
-                true
-            } else {
-                false
-            }
         }
 
         #[cfg(unix)]
@@ -700,7 +618,7 @@ pub mod imp {
 
         unsafe fn realize_gl(&self) -> Result<(), String> {
             use std::ffi::CString;
-            let _ctxt = self.make_current();
+            self.make_current();
 
             let texture_blit_vs = CString::new(include_str!("texture-blit.vert")).unwrap();
             let texture_blit_flip_vs =
@@ -1193,37 +1111,21 @@ pub mod imp {
         }
 
         #[cfg(unix)]
-        fn egl_surface(&self) -> Option<egl::Surface> {
-            self.egl_surf.get().copied()
-        }
-
-        #[cfg(unix)]
         fn wl_surface(&self) -> Option<wayland_client::protocol::wl_surface::WlSurface> {
             self.surface()
                 .and_then(|s| s.downcast::<gdk_wl::WaylandSurface>().ok())
                 .map(|w| w.wl_surface().unwrap())
         }
 
-        #[cfg(unix)]
-        fn x11_xid(&self) -> Option<xlib::Window> {
-            self.surface()
-                .and_then(|s| s.downcast::<gdk_x11::X11Surface>().ok())
-                .map(|s| s.xid())
-        }
-
-        #[cfg(unix)]
-        pub(crate) fn egl_context(&self) -> Option<egl::Context> {
-            self.egl_display().and_then(|_| self.egl_ctx.get().copied())
-        }
-
-        #[cfg(unix)]
         pub(crate) fn egl_display(&self) -> Option<egl::Display> {
             let widget = self.obj();
 
+            #[cfg(unix)]
             if let Ok(dpy) = widget.display().downcast::<gdk_wl::WaylandDisplay>() {
                 return dpy.egl_display();
             }
 
+            #[cfg(unix)]
             if let Ok(dpy) = widget.display().downcast::<gdk_x11::X11Display>() {
                 return dpy.egl_display();
             };
@@ -1453,7 +1355,7 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
                 return;
             }
 
-            let _ctx = imp.make_current();
+            imp.make_current();
             if let Some((width, height)) = size {
                 unsafe {
                     gl::BindTexture(gl::TEXTURE_2D, imp.texture_id());
@@ -1539,7 +1441,7 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
         #[cfg(not(feature = "bindings"))]
         {
             let imp = self_.imp();
-            let _ctx = imp.make_current();
+            imp.make_current();
 
             // TODO: check data boundaries
             unsafe {
@@ -1578,7 +1480,7 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
         #[cfg(all(unix, not(feature = "bindings")))]
         {
             let imp = self_.imp();
-            let _ctx = imp.make_current();
+            imp.make_current();
 
             let egl = egl::egl();
             let egl_image_target = match egl::image_target_texture_2d_oes() {
@@ -1657,7 +1559,7 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
         #[cfg(not(feature = "bindings"))]
         {
             let imp = self_.imp();
-            let _ctx = imp.make_current();
+            imp.make_current();
 
             unsafe {
                 gl::ClearColor(0.1, 0.1, 0.1, 1.0);
