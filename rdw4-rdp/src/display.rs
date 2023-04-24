@@ -250,7 +250,6 @@ mod imp {
             self.keymap.set(rdw::keymap_xtkbd());
 
             let ec = gtk::EventControllerScroll::new(gtk::EventControllerScrollFlags::BOTH_AXES);
-            self.obj().add_controller(ec);
             ec.connect_scroll(
                 clone!(@weak self as this => @default-panic, move |_, dx, dy| {
                     MainContext::default().spawn_local(glib::clone!(@weak this => async move {
@@ -260,6 +259,7 @@ mod imp {
                     glib::signal::Inhibit(false)
                 }),
             );
+            self.obj().add_controller(ec);
 
             let cb = gdk::traits::DisplayExt::clipboard(&self.obj().display());
             let watch_id = cb.connect_changed(clone!(@weak self as this => move |clipboard| {
