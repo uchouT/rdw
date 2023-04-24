@@ -14,7 +14,7 @@ use rdw_spice::spice::{self, prelude::*};
 use rdw_vnc::gvnc;
 
 fn show_error(app: gtk::Application, msg: &str) {
-    let mut dialog = gtk::builders::MessageDialogBuilder::new()
+    let mut dialog = gtk::MessageDialog::builder()
         .modal(true)
         .buttons(gtk::ButtonsType::Ok)
         .text(msg);
@@ -34,7 +34,7 @@ async fn show_password_dialog(
     with_username: bool,
     with_password: bool,
 ) -> Option<(String, String)> {
-    let mut dialog = gtk::builders::MessageDialogBuilder::new()
+    let mut dialog = gtk::MessageDialog::builder()
         .modal(true)
         .buttons(gtk::ButtonsType::Ok)
         .text("Credentials required");
@@ -45,7 +45,7 @@ async fn show_password_dialog(
     let ok = dialog.widget_for_response(gtk::ResponseType::Ok).unwrap();
     dialog.set_default_widget(Some(&ok));
     let content = dialog.content_area();
-    let grid = gtk::builders::GridBuilder::new()
+    let grid = gtk::Grid::builder()
         .hexpand(true)
         .vexpand(true)
         .halign(gtk::Align::Center)
@@ -250,7 +250,7 @@ fn main() {
         None,
     );
     app.add_main_option(
-        &glib::OPTION_REMAINING,
+        glib::OPTION_REMAINING,
         glib::Char(0),
         glib::OptionFlags::NONE,
         glib::OptionArg::StringArray,
@@ -275,7 +275,7 @@ fn main() {
     app.connect_command_line(move |app, cl| {
         let uri = cl
             .options_dict()
-            .lookup_value(&glib::OPTION_REMAINING, None)
+            .lookup_value(glib::OPTION_REMAINING, None)
             .and_then(|args| args.child_value(0).get::<String>())
             .unwrap_or_else(|| "vnc://localhost".to_string());
         let display = make_display(app, uri);
@@ -299,7 +299,7 @@ fn main() {
         };
 
         if let Ok(spice) = display.downcast::<rdw_spice::Display>() {
-            let usbredir = match rdw_spice::UsbRedir::build(spice.session()) {
+            let usbredir = match rdw_spice::UsbRedir::build(&spice.session()) {
                 Ok(it) => it,
                 Err(e) => {
                     panic!("Failed to open USB dialog: {}", e);

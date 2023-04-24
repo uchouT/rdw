@@ -1,4 +1,4 @@
-use glib::{clone, signal::SignalHandlerId, subclass::prelude::*};
+use glib::{clone, signal::SignalHandlerId};
 use gtk::{gdk, gio, glib, prelude::*};
 use rdw::{gtk, DisplayExt};
 use spice::prelude::*;

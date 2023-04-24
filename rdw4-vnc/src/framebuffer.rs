@@ -1,13 +1,13 @@
 use glib::translate::ToGlibPtrMut;
-use gtk::{glib, subclass::prelude::ObjectSubclassExt};
+use gtk::glib;
 use rdw::gtk;
 
+use gtk::subclass::prelude::*;
 use gvnc::{prelude::*, subclass::base_framebuffer::*};
 
 /// cbindgen::ignore
 mod imp {
     use super::*;
-    use gtk::subclass::prelude::*;
     use once_cell::sync::OnceCell;
 
     #[derive(Debug, Default)]
@@ -54,19 +54,14 @@ impl Framebuffer {
                 buffer.as_ptr() as _,
             );
         };
-        let fb = glib::Object::with_values(
-            Self::static_type(),
-            &[
-                ("buffer", value),
-                ("width", width.to_value()),
-                ("height", height.to_value()),
-                ("rowstride", (width * 4).to_value()),
-                ("local-format", local_format.to_value()),
-                ("remote-format", remote_format.to_value()),
-            ],
-        )
-        .downcast()
-        .unwrap();
+        let fb: Self = glib::Object::builder()
+            .property("buffer", value)
+            .property("width", width)
+            .property("height", height)
+            .property("rowstride", width * 4)
+            .property("local-format", local_format)
+            .property("remove-format", remote_format)
+            .build();
         fb.imp().buffer.set(buffer).unwrap();
         fb
     }

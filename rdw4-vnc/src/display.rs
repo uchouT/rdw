@@ -1,4 +1,4 @@
-use glib::{clone, subclass::prelude::*, translate::*};
+use glib::{clone, translate::*};
 use gtk::{glib, prelude::*};
 use gvnc::prelude::*;
 use rdw::gtk;
@@ -386,7 +386,7 @@ mod imp {
             let pixbuf_supports = |fmt| {
                 gtk::gdk_pixbuf::Pixbuf::formats()
                     .iter()
-                    .any(|f| f.name().map_or(false, |name| name.as_str() == fmt))
+                    .any(|f| f.name() == fmt)
             };
 
             if pixbuf_supports("jpeg") {
