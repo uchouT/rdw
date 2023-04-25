@@ -20,7 +20,7 @@ derivative = "2.2.0"
 libc = "0.2.92"
 gtk = { package = "gtk4", version = "0.6" }
 libloading = "0.7.0"
-khronos-egl = { version = "4.1.0", features = ["dynamic"] }
+khronos-egl = { version = "4.1.0", features = ["static"] }
 gl = "0.14.0"
 gst = { package = "gstreamer", version = "0.20" }
 gst-app = { package = "gstreamer-app", version = "0.20" }
