@@ -170,7 +170,9 @@ pub mod imp {
             gl_area.set_has_depth_buffer(false);
             gl_area.set_has_stencil_buffer(false);
             gl_area.set_auto_render(false);
-            gl_area.set_required_version(3, 2);
+            gl_area.set_use_es(true);
+            //gl_area.set_allowed_apis(gdk::GLAPI::GLES);
+            gl_area.set_required_version(3, 1);
             gl_area.connect_render(
                 clone!(@weak self as this => @default-return glib::signal::Inhibit(true), move |_, _| {
                     this.obj().render();

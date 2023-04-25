@@ -1,5 +1,4 @@
-
-#version 130
+#version 300 es
 
 uniform sampler2D tex_unit;
 in  mediump vec2 ex_tex_coord;
