@@ -4,4 +4,4 @@
 	branch = gobject
 [submodule "keycodemapdb"]
 	path = keycodemapdb
-	url = http://gitlab.com/keycodemap/keycodemapdb.git
+	url = https://gitlab.com/keycodemap/keycodemapdb.git
