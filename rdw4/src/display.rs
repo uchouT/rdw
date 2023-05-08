@@ -1366,7 +1366,7 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
                     gl::TexImage2D(
                         gl::TEXTURE_2D,
                         0,
-                        gl::RGB as _,
+                        gl::BGRA as _,
                         width as _,
                         height as _,
                         0,
