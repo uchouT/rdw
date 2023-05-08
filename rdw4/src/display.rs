@@ -17,6 +17,8 @@ use wayland_protocols::wp::{
     },
 };
 
+#[cfg(windows)]
+use crate::RdwD3d11Texture2dScanout;
 #[cfg(unix)]
 use crate::RdwDmabufScanout;
 use crate::{Grab, KeyEvent, Scroll};
@@ -58,7 +60,10 @@ pub mod imp {
         time::Duration,
     };
     #[cfg(windows)]
-    use windows::Win32::UI::WindowsAndMessaging::HHOOK;
+    use windows::Win32::{
+        Graphics::Direct3D11::{ID3D11Device1, ID3D11Texture2D},
+        UI::WindowsAndMessaging::HHOOK,
+    };
 
     unsafe impl ClassStruct for RdwDisplayClass {
         type Type = Display;
@@ -124,6 +129,12 @@ pub mod imp {
         pub(crate) win_hook: Cell<Option<HHOOK>>,
         #[cfg(windows)]
         pub(crate) win_mouse_hook: Cell<Option<HHOOK>>,
+        #[cfg(windows)]
+        pub(crate) d3d11_device: OnceCell<ID3D11Device1>,
+        #[cfg(windows)]
+        pub(crate) d3d11_texture: RefCell<Option<ID3D11Texture2D>>,
+        #[cfg(windows)]
+        pub(crate) d3d11_scanout: RefCell<Option<RdwD3d11Texture2dScanout>>,
     }
 
     #[glib::object_subclass]
@@ -618,6 +629,43 @@ pub mod imp {
             self.gl_area.get().unwrap()
         }
 
+        #[cfg(windows)]
+        unsafe fn realize_gl_win32(&self) -> Result<(), String> {
+            let dpy = self.egl_display().ok_or("No EGL display".to_string())?;
+            let query_display =
+                egl::query_display_attrib().ok_or("No eglQueryDisplayAttrib".to_string())?;
+            let query_device =
+                egl::query_device_attrib().ok_or("No eglQueryDeviceAttrib".to_string())?;
+            let mut device: egl::EGLDevice = std::ptr::null_mut();
+
+            if query_display(
+                dpy.as_ptr(),
+                egl::DEVICE_EXT,
+                &mut device as *mut _ as *mut _,
+            ) == 0
+            {
+                return Err("Failed to query EGL display device".into());
+            }
+
+            let mut d3d11_device: *mut ID3D11Device1 = std::ptr::null_mut();
+            if query_device(
+                device,
+                egl::D3D11_DEVICE_ANGLE,
+                &mut d3d11_device as *mut _ as *mut _,
+            ) == 0
+            {
+                return Err("Failed to query EGL D3D11 device".into());
+            }
+
+            // there should be a better way, to get a &ID3D instead
+            let d3d11_device = std::ptr::NonNull::new_unchecked(d3d11_device);
+            let d3d11_device: ID3D11Device1 = std::mem::transmute(d3d11_device);
+            self.d3d11_device.set(d3d11_device.clone()).unwrap();
+            std::mem::forget(d3d11_device);
+
+            Ok(())
+        }
+
         unsafe fn realize_gl(&self) -> Result<(), String> {
             use std::ffi::CString;
             self.make_current();
@@ -666,6 +714,11 @@ pub mod imp {
             let mut tex_id = 0;
             gl::GenTextures(1, &mut tex_id);
             self.texture_id.set(tex_id);
+
+            #[cfg(windows)]
+            if let Err(e) = self.realize_gl_win32() {
+                log::warn!("{}", e);
+            }
 
             self.obj().set_display_size(self.display_size.take());
             Ok(())
@@ -1134,7 +1187,104 @@ pub mod imp {
                 return dpy.egl_display();
             };
 
+            #[cfg(windows)]
+            if let Ok(dpy) = widget.display().downcast::<gdk_win32::Win32Display>() {
+                return dpy.egl_display();
+            };
+
             None
+        }
+
+        #[cfg(windows)]
+        pub(crate) fn d3d11_texture2d_acquire0(&self) -> Result<(), String> {
+            use windows::{
+                core::Interface,
+                Win32::{Graphics::Dxgi::IDXGIKeyedMutex, System::WindowsProgramming::INFINITE},
+            };
+
+            let Some(tex) = &*self.d3d11_texture.borrow() else {
+                return Ok(());
+            };
+
+            let mutex: IDXGIKeyedMutex = tex
+                .cast()
+                .map_err(|e| format!("Failed to cast to Mutex: {}", e))?;
+            unsafe {
+                mutex
+                    .AcquireSync(0, INFINITE)
+                    .map_err(|e| format!("Failed to acquire Mutex: {}", e))?
+            }
+
+            Ok(())
+        }
+
+        #[cfg(windows)]
+        pub(crate) fn d3d11_texture2d_release0(&self) -> Result<(), String> {
+            use windows::{core::Interface, Win32::Graphics::Dxgi::IDXGIKeyedMutex};
+
+            let Some(tex) = &*self.d3d11_texture.borrow() else {
+                return Ok(());
+            };
+
+            let mutex: IDXGIKeyedMutex = tex
+                .cast()
+                .map_err(|e| format!("Failed to cast to Mutex: {}", e))?;
+            unsafe {
+                mutex
+                    .ReleaseSync(0)
+                    .map_err(|e| format!("Failed to release Mutex: {}", e))?
+            }
+
+            Ok(())
+        }
+
+        #[cfg(windows)]
+        pub(crate) fn set_d3d11_texture2d_scanout(
+            &self,
+            s: RdwD3d11Texture2dScanout,
+        ) -> Result<(), String> {
+            use windows::Win32::Foundation::HANDLE;
+
+            let d3d11_device = self
+                .d3d11_device
+                .get()
+                .ok_or("No d3d11 device initialized")?;
+            let egl_image_target = egl::image_target_texture_2d_oes()
+                .ok_or("ImageTargetTexture2DOES support missing")?;
+
+            self.make_current();
+            let egl_dpy = self
+                .egl_display()
+                .ok_or("Unsupported display kind (or not egl)")?;
+            let egl = egl::egl();
+
+            let d3d11_tex: ID3D11Texture2D = unsafe {
+                d3d11_device
+                    .OpenSharedResource1(HANDLE(s.handle as _))
+                    .map_err(|e| format!("Failed to open shared texture: {}", e))?
+            };
+
+            let tex: std::ptr::NonNull<std::ffi::c_void> =
+                unsafe { std::mem::transmute_copy(&d3d11_tex) };
+            let img = egl
+                .create_image(
+                    egl_dpy,
+                    egl::no_context(),
+                    egl::D3D11_TEXTURE_ANGLE,
+                    unsafe { egl::ClientBuffer::from_ptr(tex.as_ptr()) },
+                    &[egl::NONE as _],
+                )
+                .map_err(|e| format!("eglCreateImage() failed: {}", e))?;
+
+            unsafe { gl::BindTexture(gl::TEXTURE_2D, self.texture_id()) };
+            egl_image_target(gl::TEXTURE_2D, img.as_ptr() as gl::types::GLeglImageOES);
+
+            egl.destroy_image(egl_dpy, img)
+                .map_err(|e| format!("eglDestroyImage() failed: {}", e))?;
+
+            self.d3d11_scanout.replace(Some(s));
+            self.d3d11_texture.replace(Some(d3d11_tex));
+            Ok(())
         }
     }
 }
@@ -1277,6 +1427,9 @@ pub trait DisplayExt: 'static {
     fn grabbed(&self) -> Grab;
 
     fn update_area(&self, x: i32, y: i32, w: i32, h: i32, stride: i32, data: &[u8]);
+
+    #[cfg(windows)]
+    fn set_d3d11_texture2d_scanout(&self, s: RdwD3d11Texture2dScanout);
 
     #[cfg(unix)]
     fn set_dmabuf_scanout(&self, s: RdwDmabufScanout);
@@ -1466,7 +1619,28 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
 
             #[cfg(unix)]
             imp.dmabuf.replace(None);
+            #[cfg(windows)]
+            imp.d3d11_scanout.replace(None);
             imp.gl_area().queue_render();
+        }
+    }
+
+    #[cfg(windows)]
+    fn set_d3d11_texture2d_scanout(&self, s: RdwD3d11Texture2dScanout) {
+        // Safety: safe because IsA<Display>
+        let self_: &Display = unsafe { self.unsafe_cast_ref::<Display>() };
+
+        #[cfg(feature = "bindings")]
+        unsafe {
+            ffi::rdw_display_set_d3d11_texture2d_scanout(self_.to_glib_none().0, &s);
+        }
+        #[cfg(not(feature = "bindings"))]
+        {
+            let imp = imp::Display::from_obj(self_);
+
+            if let Err(e) = imp.set_d3d11_texture2d_scanout(s) {
+                log::warn!("Failed to set D3D scanout: {}", e);
+            }
         }
     }
 
@@ -1572,7 +1746,12 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
                     let flip = false;
                     #[cfg(unix)]
                     let flip = imp.dmabuf.borrow().as_ref().map_or(false, |d| d.y0_top);
+
+                    #[cfg(windows)]
+                    imp.d3d11_texture2d_acquire0().unwrap();
                     imp.texture_blit(flip);
+                    #[cfg(windows)]
+                    imp.d3d11_texture2d_release0().unwrap();
                 }
             }
 
@@ -1848,6 +2027,12 @@ mod ffi {
         pub fn rdw_display_set_dmabuf_scanout(
             dpy: *mut RdwDisplay,
             dmabuf: *const RdwDmabufScanout,
+        );
+
+        #[cfg(windows)]
+        pub fn rdw_display_set_d3d11_texture2d_scanout(
+            dpy: *mut RdwDisplay,
+            s: *const RdwD3d11Texture2dScanout,
         );
     }
 }

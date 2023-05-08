@@ -140,6 +140,29 @@ pub extern "C" fn rdw_display_set_dmabuf_scanout(
     this.set_dmabuf_scanout(dmabuf);
 }
 
+/// rdw_display_set_d3d11_texture2d_scanout:
+/// @dpy: A #RdwDisplay
+#[cfg(windows)]
+#[no_mangle]
+pub extern "C" fn rdw_display_set_d3d11_texture2d_scanout(
+    dpy: *mut RdwDisplay,
+    s: *const RdwD3d11Texture2dScanout,
+) {
+    let this: &Display = unsafe { &from_glib_borrow(dpy) };
+    let s = unsafe { &*s };
+    let s = RdwD3d11Texture2dScanout {
+        handle: s.handle,
+        tex_width: s.tex_width,
+        tex_height: s.tex_height,
+        y0_top: s.y0_top,
+        x: s.x,
+        y: s.y,
+        w: s.w,
+        h: s.h,
+    };
+    this.set_d3d11_texture2d_scanout(s);
+}
+
 #[no_mangle]
 pub extern "C" fn rdw_content_provider_get_type() -> glib::ffi::GType {
     gtk::init().unwrap();

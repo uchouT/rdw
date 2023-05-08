@@ -23,6 +23,8 @@ mod util;
 
 pub use content_provider::ContentProvider;
 pub use display::*;
+#[cfg(windows)]
+pub use egl::RdwD3d11Texture2dScanout;
 #[cfg(unix)]
 pub use egl::RdwDmabufScanout;
 pub use error::Error;
