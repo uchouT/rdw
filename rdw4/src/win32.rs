@@ -139,7 +139,7 @@ mod imp {
             if code != HC_ACTION as i32 {
                 return CallNextHookEx(None, code, wparam, lparam);
             }
-            if wparam.0 == WM_MOUSEMOVE as _ {
+            if wparam.0 == WM_MOUSEMOVE as usize {
                 return LRESULT(1);
             }
 

@@ -10,7 +10,6 @@ use gtk::glib::{
 
 mod content_provider;
 mod display;
-#[cfg(unix)]
 mod egl;
 mod error;
 mod gstaudio;

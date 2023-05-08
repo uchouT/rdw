@@ -21,7 +21,7 @@ use wayland_protocols::wp::{
 use crate::RdwDmabufScanout;
 use crate::{Grab, KeyEvent, Scroll};
 
-#[cfg(all(unix, not(feature = "bindings")))]
+#[cfg(not(feature = "bindings"))]
 use crate::egl;
 
 #[repr(C)]
