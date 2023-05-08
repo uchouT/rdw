@@ -1501,24 +1501,24 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
                 }
             };
 
-            let attribs = vec![
-                egl::WIDTH as usize,
-                s.width as usize,
-                egl::HEIGHT as usize,
-                s.height as usize,
-                egl::LINUX_DRM_FOURCC_EXT as usize,
-                s.fourcc as usize,
-                egl::DMA_BUF_PLANE0_FD_EXT as usize,
-                s.fd as usize,
-                egl::DMA_BUF_PLANE0_PITCH_EXT as usize,
-                s.stride as usize,
-                egl::DMA_BUF_PLANE0_OFFSET_EXT as usize,
+            let attribs = &[
+                egl::WIDTH as _,
+                s.width as _,
+                egl::HEIGHT as _,
+                s.height as _,
+                egl::LINUX_DRM_FOURCC_EXT as _,
+                s.fourcc as _,
+                egl::DMA_BUF_PLANE0_FD_EXT as _,
+                s.fd as _,
+                egl::DMA_BUF_PLANE0_PITCH_EXT as _,
+                s.stride as _,
+                egl::DMA_BUF_PLANE0_OFFSET_EXT as _,
                 0,
-                egl::DMA_BUF_PLANE0_MODIFIER_LO_EXT as usize,
-                (s.modifier & 0xffffffff) as usize,
-                egl::DMA_BUF_PLANE0_MODIFIER_HI_EXT as usize,
-                (s.modifier >> 32 & 0xffffffff) as usize,
-                egl::NONE as usize,
+                egl::DMA_BUF_PLANE0_MODIFIER_LO_EXT as _,
+                (s.modifier & 0xffffffff) as _,
+                egl::DMA_BUF_PLANE0_MODIFIER_HI_EXT as _,
+                (s.modifier >> 32 & 0xffffffff) as _,
+                egl::NONE as _,
             ];
 
             let img = match egl.create_image(
@@ -1526,7 +1526,7 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
                 egl::no_context(),
                 egl::LINUX_DMA_BUF_EXT,
                 egl::no_client_buffer(),
-                &attribs,
+                attribs,
             ) {
                 Ok(img) => img,
                 Err(e) => {
