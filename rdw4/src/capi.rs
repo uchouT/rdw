@@ -5,6 +5,8 @@ use gtk::{
 
 use crate::display::*;
 
+#[cfg(windows)]
+use crate::egl::RdwD3d11Texture2dScanout;
 #[cfg(unix)]
 use crate::egl::RdwDmabufScanout;
 

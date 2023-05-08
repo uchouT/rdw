@@ -1,4 +1,9 @@
+#![allow(dead_code)]
+
+#[cfg(unix)]
 use std::os::unix::prelude::RawFd;
+#[cfg(windows)]
+use std::os::windows::raw::HANDLE;
 
 pub use khronos_egl::*;
 
@@ -6,6 +11,7 @@ pub use khronos_egl::*;
 mod imp {
     use super::*;
     use once_cell::sync::OnceCell;
+    use std::ffi::c_void;
 
     type EglInstance = khronos_egl::Instance<khronos_egl::Static>;
 
@@ -22,8 +28,14 @@ mod imp {
     pub(crate) const DMA_BUF_PLANE0_MODIFIER_LO_EXT: Int = 0x3443;
     pub(crate) const DMA_BUF_PLANE0_MODIFIER_HI_EXT: Int = 0x3444;
 
-    // GLAPI void APIENTRY glEGLImageTargetTexture2DOES (GLenum target, GLeglImageOES image);
+    pub(crate) const DEVICE_EXT: Int = 0x322C;
+    pub(crate) const D3D11_DEVICE_ANGLE: Int = 0x33A1;
+    pub(crate) const D3D11_TEXTURE_ANGLE: Enum = 0x3484;
+    pub(crate) const BGRA_EXT: Int = 0x80E1;
 
+    pub type EGLDevice = *mut c_void;
+
+    // GLAPI void APIENTRY glEGLImageTargetTexture2DOES (GLenum target, GLeglImageOES image);
     pub(crate) type ImageTargetTexture2DOesFn =
         extern "C" fn(gl::types::GLenum, gl::types::GLeglImageOES);
 
@@ -32,6 +44,28 @@ mod imp {
             egl()
                 .get_proc_address("glEGLImageTargetTexture2DOES")
                 .map(|f| std::mem::transmute::<_, ImageTargetTexture2DOesFn>(f))
+        }
+    }
+
+    // EGLBoolean (GLAPIENTRY *PFNEGLQUERYDISPLAYATTRIBEXTPROC)(EGLDisplay dpy, EGLint attribute, EGLAttrib * value);
+    pub(crate) type QueryDisplayAttribFn = extern "C" fn(EGLDisplay, Int, *mut Attrib) -> Boolean;
+
+    pub(crate) fn query_display_attrib() -> Option<QueryDisplayAttribFn> {
+        unsafe {
+            egl()
+                .get_proc_address("eglQueryDisplayAttribEXT")
+                .map(|f| std::mem::transmute::<_, QueryDisplayAttribFn>(f))
+        }
+    }
+
+    // EGLBoolean (GLAPIENTRY *PFNEGLQUERYDEVICEATTRIBEXTPROC)(EGLDeviceEXT device, EGLint attribute, EGLAttrib * value);
+    pub(crate) type QueryDeviceAttribFn = extern "C" fn(EGLDevice, Int, *mut Attrib) -> Boolean;
+
+    pub(crate) fn query_device_attrib() -> Option<QueryDeviceAttribFn> {
+        unsafe {
+            egl()
+                .get_proc_address("eglQueryDeviceAttribEXT")
+                .map(|f| std::mem::transmute::<_, QueryDeviceAttribFn>(f))
         }
     }
 
@@ -47,10 +81,36 @@ mod imp {
 #[cfg(not(feature = "bindings"))]
 pub(crate) use imp::*;
 
+#[cfg(windows)]
+#[derive(Debug)]
+#[repr(C)]
+pub struct RdwD3d11Texture2dScanout {
+    pub handle: HANDLE,
+    pub tex_width: u32,
+    pub tex_height: u32,
+    pub y0_top: bool,
+    pub x: u32,
+    pub y: u32,
+    pub w: u32,
+    pub h: u32,
+}
+
+#[cfg(windows)]
+impl Drop for RdwD3d11Texture2dScanout {
+    fn drop(&mut self) {
+        use windows::Win32::Foundation::{CloseHandle, HANDLE};
+
+        unsafe {
+            CloseHandle(HANDLE(self.handle as _));
+        }
+    }
+}
+
 /// RdwDmabufScanout:
 /// @fd: DMABUF fd, ownership is taken.
 ///
 /// A DMABUF file descriptor along with the associated details.
+#[cfg(unix)]
 #[derive(Debug)]
 #[repr(C)]
 pub struct RdwDmabufScanout {
@@ -63,6 +123,7 @@ pub struct RdwDmabufScanout {
     pub y0_top: bool,
 }
 
+#[cfg(unix)]
 impl Drop for RdwDmabufScanout {
     fn drop(&mut self) {
         if self.fd >= 0 {
