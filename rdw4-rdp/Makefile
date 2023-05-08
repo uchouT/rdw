@@ -1,5 +1,5 @@
-MACHINE := $(shell uname -i)
-ifeq ($(MACHINE), x86_64)
+MACHINE := $(shell getconf LONG_BIT)
+ifeq ($(MACHINE), 64)
 LIB = lib64
 else
 LIB = lib
