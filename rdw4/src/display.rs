@@ -1024,6 +1024,8 @@ pub mod imp {
                 });
                 gl::ActiveTexture(gl::TEXTURE0);
                 gl::BindTexture(gl::TEXTURE_2D, self.texture_id());
+                gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as _);
+                gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as _);
                 gl::BindVertexArray(self.texture_blit_vao.get());
                 gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
             }
@@ -1448,8 +1450,6 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
             // TODO: check data boundaries
             unsafe {
                 gl::BindTexture(gl::TEXTURE_2D, imp.texture_id());
-                gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as _);
-                gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as _);
                 gl::PixelStorei(gl::UNPACK_ROW_LENGTH, stride / 4);
                 gl::TexSubImage2D(
                     gl::TEXTURE_2D,
@@ -1537,8 +1537,6 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
 
             unsafe {
                 gl::BindTexture(gl::TEXTURE_2D, imp.texture_id());
-                gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as _);
-                gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as _);
                 egl_image_target(gl::TEXTURE_2D, img.as_ptr() as gl::types::GLeglImageOES);
             }
 
