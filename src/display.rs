@@ -248,6 +248,26 @@ mod imp {
                                 let bytes = map.as_bytes();
                                 this.obj().update_area(u.x as _, u.y as _, u.w as _, u.h as _, stride as _, &bytes[u.y as usize * stride as usize + u.x as usize * 4..]);
                             }
+                            #[cfg(windows)]
+                            ScanoutD3dTexture2d(s) => {
+                                log::debug!("{s:?}");
+                                this.obj().set_display_size(Some((s.w as _, s.h as _)));
+                                this.obj().set_d3d11_texture2d_scanout(rdw::RdwD3d11Texture2dScanout {
+                                    handle: s.handle as _,
+                                    tex_width: s.tex_width,
+                                    tex_height: s.tex_height,
+                                    y0_top: s.y0_top,
+                                    x: s.x,
+                                    y: s.y,
+                                    w: s.w,
+                                    h: s.h,
+                                });
+                            }
+                            #[cfg(windows)]
+                            UpdateD3dTexture2d { wait_tx, .. } => {
+                                this.obj().render();
+                                let _ = wait_tx.send(());
+                            }
                             #[cfg(unix)]
                             ScanoutDMABUF(s) => {
                                 log::trace!("{s:?}");
@@ -337,6 +357,13 @@ enum ConsoleEvent {
     ScanoutMap(qemu_display::ScanoutMap),
     #[cfg(windows)]
     UpdateMap(qemu_display::UpdateMap),
+    #[cfg(windows)]
+    ScanoutD3dTexture2d(qemu_display::ScanoutD3dTexture2d),
+    #[cfg(windows)]
+    UpdateD3dTexture2d {
+        _update: qemu_display::UpdateD3dTexture2d,
+        wait_tx: futures::channel::oneshot::Sender<()>,
+    },
     #[cfg(unix)]
     ScanoutDMABUF(qemu_display::ScanoutDMABUF),
     #[cfg(unix)]
@@ -380,6 +407,20 @@ impl ConsoleListenerHandler for ConsoleHandler {
     #[cfg(windows)]
     async fn update_map(&mut self, update: qemu_display::UpdateMap) {
         self.send(ConsoleEvent::UpdateMap(update));
+    }
+
+    #[cfg(windows)]
+    async fn scanout_d3d11_texture2d(&mut self, scanout: qemu_display::ScanoutD3dTexture2d) {
+        self.send(ConsoleEvent::ScanoutD3dTexture2d(scanout));
+    }
+
+    #[cfg(windows)]
+    async fn update_d3d11_texture2d(&mut self, _update: qemu_display::UpdateD3dTexture2d) {
+        let (wait_tx, wait_rx) = futures::channel::oneshot::channel();
+        self.send(ConsoleEvent::UpdateD3dTexture2d { _update, wait_tx });
+        if let Err(e) = wait_rx.await {
+            log::warn!("wait update d3d texture2d failed: {}", e);
+        }
     }
 
     #[cfg(unix)]
