@@ -93,7 +93,7 @@ impl App {
     fn new() -> Self {
         let app = gtk::Application::new(Some("org.qemu.rdw.demo"), ApplicationFlags::NON_UNIQUE);
         app.add_main_option(
-            &glib::OPTION_REMAINING,
+            glib::OPTION_REMAINING,
             glib::Char(0),
             glib::OptionFlags::NONE,
             glib::OptionArg::StringArray,
@@ -164,7 +164,7 @@ impl App {
                 app_opt.wait = true;
             }
             app_opt.vm_name = opt
-                .lookup_value(&glib::OPTION_REMAINING, None)
+                .lookup_value(glib::OPTION_REMAINING, None)
                 .and_then(|args| args.child_value(0).get::<String>());
             -1
         });
