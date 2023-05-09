@@ -306,7 +306,7 @@ impl App {
         self.inner.clipboard.replace(Some(cb));
     }
 
-    fn run(&self) -> i32 {
+    fn run(&self) -> glib::ExitCode {
         self.inner.app.run()
     }
 }

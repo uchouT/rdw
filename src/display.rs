@@ -313,14 +313,14 @@ glib::wrapper! {
 
 impl Display {
     pub fn new(console: Console) -> Self {
-        let obj = glib::Object::new(&[]);
-        let self_ = imp::Display::from_instance(&obj);
+        let obj = glib::Object::builder().build();
+        let self_ = imp::Display::from_obj(&obj);
         self_.console.set(console).unwrap();
         obj
     }
 
     pub(crate) fn console(&self) -> &Console {
-        let self_ = imp::Display::from_instance(self);
+        let self_ = imp::Display::from_obj(self);
         self_.console.get().unwrap()
     }
 }
