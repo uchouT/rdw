@@ -3,6 +3,8 @@ use glib::{clone, subclass::prelude::*, MainContext};
 use gtk::glib;
 use once_cell::sync::OnceCell;
 use qemu_display::{Console, ConsoleListenerHandler};
+#[cfg(windows)]
+use qemu_display::{ConsoleListenerD3d11Handler, ConsoleListenerMapHandler};
 use rdw::{gtk, DisplayExt};
 use std::cell::Cell;
 #[cfg(unix)]
@@ -192,7 +194,14 @@ mod imp {
                 let console = this.console.get().unwrap();
                 // we have to use a channel, because widget is not Send..
                 let (sender, mut receiver) = futures::channel::mpsc::unbounded();
-                console.register_listener(ConsoleHandler { sender }).await.unwrap();
+                let handler = ConsoleHandler { sender };
+                console.register_listener(handler.clone()).await.unwrap();
+                #[cfg(windows)]
+                {
+                    console.set_map_listener(handler.clone()).await.unwrap();
+                    console.set_d3d11_listener(handler.clone()).await.unwrap();
+                }
+
                 MainContext::default().spawn_local(clone!(@weak this => async move {
                     while let Some(e) = receiver.next().await {
                         use ConsoleEvent::*;
@@ -377,6 +386,7 @@ enum ConsoleEvent {
     Disconnected,
 }
 
+#[derive(Clone)]
 struct ConsoleHandler {
     sender: futures::channel::mpsc::UnboundedSender<ConsoleEvent>,
 }
@@ -389,16 +399,9 @@ impl ConsoleHandler {
     }
 }
 
+#[cfg(windows)]
 #[async_trait::async_trait]
-impl ConsoleListenerHandler for ConsoleHandler {
-    async fn scanout(&mut self, scanout: qemu_display::Scanout) {
-        self.send(ConsoleEvent::Scanout(scanout));
-    }
-
-    async fn update(&mut self, update: qemu_display::Update) {
-        self.send(ConsoleEvent::Update(update));
-    }
-
+impl ConsoleListenerMapHandler for ConsoleHandler {
     #[cfg(windows)]
     async fn scanout_map(&mut self, scanout: qemu_display::ScanoutMap) {
         self.send(ConsoleEvent::ScanoutMap(scanout));
@@ -408,19 +411,34 @@ impl ConsoleListenerHandler for ConsoleHandler {
     async fn update_map(&mut self, update: qemu_display::UpdateMap) {
         self.send(ConsoleEvent::UpdateMap(update));
     }
+}
 
+#[cfg(windows)]
+#[async_trait::async_trait]
+impl ConsoleListenerD3d11Handler for ConsoleHandler {
     #[cfg(windows)]
-    async fn scanout_d3d11_texture2d(&mut self, scanout: qemu_display::ScanoutD3dTexture2d) {
+    async fn scanout_texture2d(&mut self, scanout: qemu_display::ScanoutD3dTexture2d) {
         self.send(ConsoleEvent::ScanoutD3dTexture2d(scanout));
     }
 
     #[cfg(windows)]
-    async fn update_d3d11_texture2d(&mut self, _update: qemu_display::UpdateD3dTexture2d) {
+    async fn update_texture2d(&mut self, _update: qemu_display::UpdateD3dTexture2d) {
         let (wait_tx, wait_rx) = futures::channel::oneshot::channel();
         self.send(ConsoleEvent::UpdateD3dTexture2d { _update, wait_tx });
         if let Err(e) = wait_rx.await {
             log::warn!("wait update d3d texture2d failed: {}", e);
         }
+    }
+}
+
+#[async_trait::async_trait]
+impl ConsoleListenerHandler for ConsoleHandler {
+    async fn scanout(&mut self, scanout: qemu_display::Scanout) {
+        self.send(ConsoleEvent::Scanout(scanout));
+    }
+
+    async fn update(&mut self, update: qemu_display::Update) {
+        self.send(ConsoleEvent::Update(update));
     }
 
     #[cfg(unix)]
@@ -451,6 +469,18 @@ impl ConsoleListenerHandler for ConsoleHandler {
 
     fn disconnected(&mut self) {
         self.send(ConsoleEvent::Disconnected);
+    }
+
+    fn interfaces(&self) -> Vec<String> {
+        // todo: find a clever way to query the object server for this?
+        if cfg!(windows) {
+            vec![
+                "org.qemu.Display1.Listener.Win32.Map".to_string(),
+                "org.qemu.Display1.Listener.Win32.D3d11".to_string(),
+            ]
+        } else {
+            vec![]
+        }
     }
 }
 
