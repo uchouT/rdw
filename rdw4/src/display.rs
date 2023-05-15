@@ -62,8 +62,25 @@ pub mod imp {
     #[cfg(windows)]
     use windows::Win32::{
         Graphics::Direct3D11::{ID3D11Device1, ID3D11Texture2D},
+        Graphics::Dxgi::IDXGIKeyedMutex,
         UI::WindowsAndMessaging::HHOOK,
     };
+
+    #[cfg(windows)]
+    pub(crate) struct D3d11TexGuard(IDXGIKeyedMutex);
+
+    #[cfg(windows)]
+    impl Drop for D3d11TexGuard {
+        fn drop(&mut self) {
+            if let Err(e) = unsafe {
+                self.0
+                    .ReleaseSync(0)
+                    .map_err(|e| format!("Failed to release Mutex: {}", e))
+            } {
+                log::warn!("{:?}", e);
+            }
+        }
+    }
 
     unsafe impl ClassStruct for RdwDisplayClass {
         type Type = Display;
@@ -135,6 +152,8 @@ pub mod imp {
         pub(crate) d3d11_texture: RefCell<Option<ID3D11Texture2D>>,
         #[cfg(windows)]
         pub(crate) d3d11_scanout: RefCell<Option<RdwD3d11Texture2dScanout>>,
+        #[cfg(windows)]
+        pub(crate) d3d11_texture_can_acquire: Cell<bool>,
     }
 
     #[glib::object_subclass]
@@ -1196,16 +1215,19 @@ pub mod imp {
         }
 
         #[cfg(windows)]
-        pub(crate) fn d3d11_texture2d_acquire0(&self) -> Result<(), String> {
-            use windows::{
-                core::Interface,
-                Win32::{Graphics::Dxgi::IDXGIKeyedMutex, System::WindowsProgramming::INFINITE},
-            };
+        pub(crate) fn d3d11_texture2d_acquire0(&self) -> Result<Option<D3d11TexGuard>, String> {
+            use windows::{core::Interface, Win32::System::WindowsProgramming::INFINITE};
 
+            if !self.d3d11_texture_can_acquire.get() {
+                log::debug!("can't acquire texture2d");
+                return Ok(None);
+            }
             let Some(tex) = &*self.d3d11_texture.borrow() else {
-                return Ok(());
+                log::debug!("no texture2d");
+                return Ok(None);
             };
 
+            log::trace!("acquire d3d texture, begin");
             let mutex: IDXGIKeyedMutex = tex
                 .cast()
                 .map_err(|e| format!("Failed to cast to Mutex: {}", e))?;
@@ -1214,28 +1236,14 @@ pub mod imp {
                     .AcquireSync(0, INFINITE)
                     .map_err(|e| format!("Failed to acquire Mutex: {}", e))?
             }
+            log::trace!("acquire d3d texture, end");
 
-            Ok(())
+            Ok(Some(D3d11TexGuard(mutex)))
         }
 
         #[cfg(windows)]
-        pub(crate) fn d3d11_texture2d_release0(&self) -> Result<(), String> {
-            use windows::{core::Interface, Win32::Graphics::Dxgi::IDXGIKeyedMutex};
-
-            let Some(tex) = &*self.d3d11_texture.borrow() else {
-                return Ok(());
-            };
-
-            let mutex: IDXGIKeyedMutex = tex
-                .cast()
-                .map_err(|e| format!("Failed to cast to Mutex: {}", e))?;
-            unsafe {
-                mutex
-                    .ReleaseSync(0)
-                    .map_err(|e| format!("Failed to release Mutex: {}", e))?
-            }
-
-            Ok(())
+        pub(crate) fn set_d3d11_texture2d_can_acquire(&self, can_acquire: bool) {
+            self.d3d11_texture_can_acquire.set(can_acquire);
         }
 
         #[cfg(windows)]
@@ -1436,6 +1444,9 @@ pub trait DisplayExt: 'static {
 
     #[cfg(windows)]
     fn set_d3d11_texture2d_scanout(&self, s: Option<RdwD3d11Texture2dScanout>);
+
+    #[cfg(windows)]
+    fn set_d3d11_texture2d_can_acquire(&self, can_acquire: bool);
 
     #[cfg(unix)]
     fn set_dmabuf_scanout(&self, s: RdwDmabufScanout);
@@ -1654,6 +1665,23 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
         }
     }
 
+    #[cfg(windows)]
+    fn set_d3d11_texture2d_can_acquire(&self, can_acquire: bool) {
+        // Safety: safe because IsA<Display>
+        let self_: &Display = unsafe { self.unsafe_cast_ref::<Display>() };
+
+        #[cfg(feature = "bindings")]
+        unsafe {
+            ffi::rdw_display_set_d3d11_texture2d_can_acquire(self_.to_glib_none().0, can_acquire);
+        }
+        #[cfg(not(feature = "bindings"))]
+        {
+            let imp = imp::Display::from_obj(self_);
+
+            imp.set_d3d11_texture2d_can_acquire(can_acquire);
+        }
+    }
+
     #[cfg(unix)]
     fn set_dmabuf_scanout(&self, s: RdwDmabufScanout) {
         // Safety: safe because IsA<Display>
@@ -1758,10 +1786,10 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
                     let flip = imp.dmabuf.borrow().as_ref().map_or(false, |d| d.y0_top);
 
                     #[cfg(windows)]
-                    imp.d3d11_texture2d_acquire0().unwrap();
+                    let guard = imp.d3d11_texture2d_acquire0().unwrap();
                     imp.texture_blit(flip);
                     #[cfg(windows)]
-                    imp.d3d11_texture2d_release0().unwrap();
+                    drop(guard)
                 }
             }
 
@@ -2044,6 +2072,9 @@ mod ffi {
             dpy: *mut RdwDisplay,
             s: *const RdwD3d11Texture2dScanout,
         );
+
+        #[cfg(windows)]
+        pub fn rdw_display_set_d3d11_texture2d_can_acquire(dpy: *mut RdwDisplay, can_acquire: bool);
     }
 }
 

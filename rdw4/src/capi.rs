@@ -151,7 +151,7 @@ pub extern "C" fn rdw_display_set_d3d11_texture2d_scanout(
     let this: &Display = unsafe { &from_glib_borrow(dpy) };
     let s = if s.is_null() {
         None
-    }  else {
+    } else {
         let s = unsafe { &*s };
         Some(RdwD3d11Texture2dScanout {
             handle: s.handle,
@@ -166,6 +166,18 @@ pub extern "C" fn rdw_display_set_d3d11_texture2d_scanout(
     };
 
     this.set_d3d11_texture2d_scanout(s);
+}
+
+/// rdw_display_set_d3d11_texture2d_can_acquire:
+/// @dpy: A #RdwDisplay
+#[cfg(windows)]
+#[no_mangle]
+pub extern "C" fn rdw_display_set_d3d11_texture2d_can_acquire(
+    dpy: *mut RdwDisplay,
+    can_acquire: bool,
+) {
+    let this: &Display = unsafe { &from_glib_borrow(dpy) };
+    this.set_d3d11_texture2d_can_acquire(can_acquire);
 }
 
 #[no_mangle]
