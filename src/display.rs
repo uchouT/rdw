@@ -261,7 +261,7 @@ mod imp {
                             ScanoutD3dTexture2d(s) => {
                                 log::debug!("{s:?}");
                                 this.obj().set_display_size(Some((s.w as _, s.h as _)));
-                                this.obj().set_d3d11_texture2d_scanout(rdw::RdwD3d11Texture2dScanout {
+                                this.obj().set_d3d11_texture2d_scanout(Some(rdw::RdwD3d11Texture2dScanout {
                                     handle: s.handle as _,
                                     tex_width: s.tex_width,
                                     tex_height: s.tex_height,
@@ -270,11 +270,13 @@ mod imp {
                                     y: s.y,
                                     w: s.w,
                                     h: s.h,
-                                });
+                                }));
                             }
                             #[cfg(windows)]
                             UpdateD3dTexture2d { wait_tx, .. } => {
+                                this.obj().set_d3d11_texture2d_can_acquire(true);
                                 this.obj().render();
+                                this.obj().set_d3d11_texture2d_can_acquire(false);
                                 let _ = wait_tx.send(());
                             }
                             #[cfg(unix)]
