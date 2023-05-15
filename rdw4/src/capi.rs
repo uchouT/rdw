@@ -149,17 +149,22 @@ pub extern "C" fn rdw_display_set_d3d11_texture2d_scanout(
     s: *const RdwD3d11Texture2dScanout,
 ) {
     let this: &Display = unsafe { &from_glib_borrow(dpy) };
-    let s = unsafe { &*s };
-    let s = RdwD3d11Texture2dScanout {
-        handle: s.handle,
-        tex_width: s.tex_width,
-        tex_height: s.tex_height,
-        y0_top: s.y0_top,
-        x: s.x,
-        y: s.y,
-        w: s.w,
-        h: s.h,
+    let s = if s.is_null() {
+        None
+    }  else {
+        let s = unsafe { &*s };
+        Some(RdwD3d11Texture2dScanout {
+            handle: s.handle,
+            tex_width: s.tex_width,
+            tex_height: s.tex_height,
+            y0_top: s.y0_top,
+            x: s.x,
+            y: s.y,
+            w: s.w,
+            h: s.h,
+        })
     };
+
     this.set_d3d11_texture2d_scanout(s);
 }
 

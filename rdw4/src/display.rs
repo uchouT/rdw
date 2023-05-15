@@ -1241,9 +1241,15 @@ pub mod imp {
         #[cfg(windows)]
         pub(crate) fn set_d3d11_texture2d_scanout(
             &self,
-            s: RdwD3d11Texture2dScanout,
+            s: Option<RdwD3d11Texture2dScanout>,
         ) -> Result<(), String> {
             use windows::Win32::Foundation::HANDLE;
+
+            let Some(s) = s else {
+                self.d3d11_scanout.replace(None);
+                self.d3d11_texture.replace(None);
+                return Ok(());
+            };
 
             let d3d11_device = self
                 .d3d11_device
@@ -1429,7 +1435,7 @@ pub trait DisplayExt: 'static {
     fn update_area(&self, x: i32, y: i32, w: i32, h: i32, stride: i32, data: &[u8]);
 
     #[cfg(windows)]
-    fn set_d3d11_texture2d_scanout(&self, s: RdwD3d11Texture2dScanout);
+    fn set_d3d11_texture2d_scanout(&self, s: Option<RdwD3d11Texture2dScanout>);
 
     #[cfg(unix)]
     fn set_dmabuf_scanout(&self, s: RdwDmabufScanout);
@@ -1591,6 +1597,9 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
         // Safety: safe because IsA<Display>
         let self_: &Display = unsafe { self.unsafe_cast_ref::<Display>() };
 
+        #[cfg(windows)]
+        self.set_d3d11_texture2d_scanout(None);
+
         #[cfg(feature = "bindings")]
         unsafe {
             ffi::rdw_display_update_area(self_.to_glib_none().0, x, y, w, h, stride, data.as_ptr());
@@ -1626,13 +1635,14 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
     }
 
     #[cfg(windows)]
-    fn set_d3d11_texture2d_scanout(&self, s: RdwD3d11Texture2dScanout) {
+    fn set_d3d11_texture2d_scanout(&self, s: Option<RdwD3d11Texture2dScanout>) {
         // Safety: safe because IsA<Display>
         let self_: &Display = unsafe { self.unsafe_cast_ref::<Display>() };
 
         #[cfg(feature = "bindings")]
         unsafe {
-            ffi::rdw_display_set_d3d11_texture2d_scanout(self_.to_glib_none().0, &s);
+            let s = s.as_ref().map_or(std::ptr::null(), |s| s as *const _);
+            ffi::rdw_display_set_d3d11_texture2d_scanout(self_.to_glib_none().0, s);
         }
         #[cfg(not(feature = "bindings"))]
         {
