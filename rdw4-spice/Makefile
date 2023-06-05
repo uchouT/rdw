@@ -5,10 +5,10 @@ else
 LIB = lib
 endif
 
-HEADER = inst/usr/include/rdw4/rdw-spice.h
-GIR = inst/usr/share/gir-1.0/RdwSpice-4.0.gir
-TYPELIB = inst/usr/$(LIB)/girepository-1.0/RdwSpice-4.0.typelib
-VAPI = inst/usr/share/vala/vapi/rdw4-spice.vapi
+HEADER = inst/$(PREFIX)/include/rdw4/rdw-spice.h
+GIR = inst/$(PREFIX)/share/gir-1.0/RdwSpice-4.0.gir
+TYPELIB = inst/$(PREFIX)/$(LIB)/girepository-1.0/RdwSpice-4.0.typelib
+VAPI = inst/$(PREFIX)/share/vala/vapi/rdw4-spice.vapi
 
 RUST_SOURCES = $(shell find src)
 
@@ -16,10 +16,10 @@ all: $(GIR) $(TYPELIB) $(VAPI)
 
 export PKG_CONFIG_PATH+=:$(PWD)/inst/$(PREFIX)/$(LIB)/pkgconfig
 export GI_TYPELIB_PATH+=:$(PWD)/inst/$(PREFIX)/$(LIB)/girepository-1.0
-export LD_LIBRARY_PATH=$(PWD)/inst/usr/$(LIB)
+export LD_LIBRARY_PATH=$(PWD)/inst/$(PREFIX)/$(LIB)
 
 $(HEADER): $(RUST_SOURCES)
-	cargo cinstall --release --destdir=inst --prefix=/usr --libdir=/usr/$(LIB)
+	cargo cinstall --release --destdir=inst --prefix=$(PREFIX) --libdir=$(PREFIX)/$(LIB)
 
 $(GIR): $(HEADER)
 	mkdir -p $(@D)
@@ -27,7 +27,7 @@ $(GIR): $(HEADER)
 		--namespace RdwSpice --nsversion=4.0 \
 		--identifier-prefix RdwSpice \
 		-Iinst/include --c-include "rdw-spice.h" \
-		--library=rdw4-spice --library-path=inst/usr/$(LIB) \
+		--library=rdw4-spice --library-path=inst/$(PREFIX)/$(LIB) \
 		--include=SpiceClientGLib-2.0 --pkg spice-client-glib-2.0 \
 		--include=Rdw-4.0 --pkg rdw4 \
 		--output $@ \
