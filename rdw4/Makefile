@@ -11,8 +11,8 @@ export PREFIX=$(MINGW_PREFIX)
 else
 export PREFIX=/usr
 endif
-export PKG_CONFIG_PATH=$(PWD)/inst/$(PREFIX)/$(LIB)/pkgconfig
-export GI_TYPELIB_PATH=$(PWD)/inst/$(PREFIX)/$(LIB)/girepository-1.0
+export PKG_CONFIG_PATH+=:$(PWD)/inst/$(PREFIX)/$(LIB)/pkgconfig
+export GI_TYPELIB_PATH+=:$(PWD)/inst/$(PREFIX)/$(LIB)/girepository-1.0
 export LD_LIBRARY_PATH=$(PWD)/inst/$(PREFIX)/$(LIB)
 
 HEADER = inst/$(PREFIX)/include/rdw4/rdw.h

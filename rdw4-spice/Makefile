@@ -14,8 +14,8 @@ RUST_SOURCES = $(shell find src)
 
 all: $(GIR) $(TYPELIB) $(VAPI)
 
-export PKG_CONFIG_PATH=$(PWD)/inst/usr/$(LIB)/pkgconfig
-export GI_TYPELIB_PATH=$(PWD)/inst/usr/$(LIB)/girepository-1.0
+export PKG_CONFIG_PATH+=:$(PWD)/inst/$(PREFIX)/$(LIB)/pkgconfig
+export GI_TYPELIB_PATH+=:$(PWD)/inst/$(PREFIX)/$(LIB)/girepository-1.0
 export LD_LIBRARY_PATH=$(PWD)/inst/usr/$(LIB)
 
 $(HEADER): $(RUST_SOURCES)
