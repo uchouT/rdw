@@ -43,6 +43,7 @@ fn main() {
             version.patch
         );
         config.autogen_warning = Some(warning + &version_info);
+        config.defines.insert("windows".into(), "WIN32".into());
 
         Builder::new()
             .with_crate(&path)
@@ -51,6 +52,7 @@ fn main() {
             .with_include_version(true)
             .with_include_guard(format!("{}_H", name.to_uppercase()))
             .with_sys_include("gtk/gtk.h")
+            .with_target_os_define("windows", "WIN32")
             .generate()
             .unwrap()
             .write_to_file(out_include.join(format!("{}.h", name)));
