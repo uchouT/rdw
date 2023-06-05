@@ -48,4 +48,4 @@ $(VAPI): $(GIR)
 	echo gvnc-1.0 >> $(@D)/rdw4-vnc.deps
 
 install: $(HEADER)
-	sudo cp -r inst/* $(DESTDIR)/
+	cp -r inst/* $(DESTDIR)/

@@ -51,4 +51,4 @@ $(VAPI): $(GIR)
 	echo gtk4 > $(@D)/rdw4.deps
 
 install: $(HEADER)
-	sudo cp -r inst/* $(DESTDIR)/
+	cp -r inst/* $(DESTDIR)/

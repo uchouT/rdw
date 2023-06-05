@@ -53,4 +53,4 @@ $(VAPI): $(GIR)
 	echo freerdp2 >> $(@D)/rdw4-rdp.deps
 
 install: $(HEADER)
-	sudo cp -r inst/* $(DESTDIR)/
+	cp -r inst/* $(DESTDIR)/

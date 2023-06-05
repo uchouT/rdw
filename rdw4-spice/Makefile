@@ -48,4 +48,4 @@ $(VAPI): $(GIR)
 	echo spice-client-glib-2.0 >> $(@D)/rdw4-spice.deps
 
 install: $(HEADER)
-	sudo cp -r inst/* $(DESTDIR)/
+	cp -r inst/* $(DESTDIR)/
