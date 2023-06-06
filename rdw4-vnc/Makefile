@@ -5,6 +5,13 @@ else
 LIB = lib
 endif
 
+ifdef MINGW_PREFIX
+export MSYS2_ARG_CONV_EXCL=*
+export PREFIX=$(MINGW_PREFIX)
+else
+export PREFIX=/usr
+endif
+
 HEADER = inst/$(PREFIX)/include/rdw4/rdw-vnc.h
 GIR = inst/$(PREFIX)/share/gir-1.0/RdwVnc-4.0.gir
 TYPELIB = inst/$(PREFIX)/$(LIB)/girepository-1.0/RdwVnc-4.0.typelib
