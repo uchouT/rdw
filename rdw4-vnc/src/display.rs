@@ -1,5 +1,5 @@
 use glib::{clone, translate::*};
-use gtk::{glib, prelude::*};
+use gtk::{gdk, glib, prelude::*};
 use gvnc::prelude::*;
 use rdw::gtk;
 
@@ -266,6 +266,10 @@ mod imp {
             self.parent_realize();
 
             self.keymap.set(rdw::keymap_qnum());
+
+            // gtk-vnc doesn't follow regular G_MESSAGES_DEBUG= usage...
+            // #[cfg(debug_assertions)]
+            // gvnc::set_debug(true);
         }
     }
 
@@ -406,6 +410,14 @@ mod imp {
             self.connection.set_encodings(&enc)?;
 
             self.framebuffer_update_request(false)?;
+
+            let abs = self.connection.is_abs_pointer();
+            log::debug!("is_abs_pointer: {:?}", abs);
+            self.obj().set_mouse_absolute(abs);
+            // hidden until we receive a cursor change
+            self.obj()
+                .define_cursor(gdk::Cursor::from_name("none", None));
+
             Ok(())
         }
     }
