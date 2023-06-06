@@ -6,45 +6,31 @@ use std::{
     },
 };
 
+use adw::prelude::*;
 use gio::ApplicationFlags;
 use glib::{clone, translate::IntoGlib};
-use gtk::{gdk, gio, glib, prelude::*};
+use gtk::{gdk, gio, glib};
 use rdw::{gtk, DisplayExt};
 use rdw_spice::spice::{self, prelude::*};
 use rdw_vnc::gvnc;
 
-fn show_error(app: gtk::Application, msg: &str) {
-    let mut dialog = gtk::MessageDialog::builder()
+fn show_error(app: adw::Application, msg: &str) {
+    let mut dialog = adw::MessageDialog::builder()
         .modal(true)
-        .buttons(gtk::ButtonsType::Ok)
-        .text(msg);
+        .heading("Connection error")
+        .body(msg);
     if let Some(parent) = app.active_window() {
         dialog = dialog.transient_for(&parent);
     }
-    let dialog = dialog.build();
-    let run_dialog = async move {
-        dialog.run_future().await;
-        app.quit();
-    };
-    glib::MainContext::default().spawn_local(run_dialog);
+    dialog.build().present()
 }
 
 async fn show_password_dialog(
-    app: gtk::Application,
+    app: adw::Application,
     with_username: bool,
     with_password: bool,
 ) -> Option<(String, String)> {
-    let mut dialog = gtk::MessageDialog::builder()
-        .modal(true)
-        .buttons(gtk::ButtonsType::Ok)
-        .text("Credentials required");
-    if let Some(parent) = app.active_window() {
-        dialog = dialog.transient_for(&parent);
-    }
-    let dialog = dialog.build();
-    let ok = dialog.widget_for_response(gtk::ResponseType::Ok).unwrap();
-    dialog.set_default_widget(Some(&ok));
-    let content = dialog.content_area();
+    dbg!();
     let grid = gtk::Grid::builder()
         .hexpand(true)
         .vexpand(true)
@@ -53,7 +39,17 @@ async fn show_password_dialog(
         .row_spacing(6)
         .column_spacing(6)
         .build();
-    content.append(&grid);
+    let mut dialog = adw::MessageDialog::builder()
+        .modal(true)
+        .extra_child(&grid)
+        .default_response("ok")
+        .heading("Credentials required");
+    if let Some(parent) = app.active_window() {
+        dialog = dialog.transient_for(&parent);
+    }
+    let dialog = dialog.build();
+    dialog.add_responses(&[("ok", "Ok")]);
+
     let username = gtk::Entry::new();
     username.set_activates_default(true);
     if with_username {
@@ -66,15 +62,15 @@ async fn show_password_dialog(
         grid.attach(&gtk::Label::new(Some("Password")), 0, 1, 1, 1);
         grid.attach(&password, 1, 1, 1, 1);
     }
-    let resp = dialog.run_future().await;
-    dialog.destroy();
-    match resp {
-        gtk::ResponseType::Ok => Some((username.text().into(), password.text().into())),
+
+    let resp = dialog.choose_future().await;
+    match resp.as_str() {
+        "ok" => Some((username.text().into(), password.text().into())),
         _ => None,
     }
 }
 
-fn rdp_display(app: &gtk::Application, uri: glib::Uri) -> rdw::Display {
+fn rdp_display(app: &adw::Application, uri: glib::Uri) -> rdw::Display {
     let rdp = rdw_rdp::Display::new();
 
     let port = match uri.port() {
@@ -129,7 +125,7 @@ fn rdp_display(app: &gtk::Application, uri: glib::Uri) -> rdw::Display {
     rdp.upcast()
 }
 
-fn vnc_display(app: &gtk::Application, uri: glib::Uri) -> rdw::Display {
+fn vnc_display(app: &adw::Application, uri: glib::Uri) -> rdw::Display {
     let has_error = Arc::new(AtomicBool::new(false));
 
     let port = match uri.port() {
@@ -180,7 +176,7 @@ fn vnc_display(app: &gtk::Application, uri: glib::Uri) -> rdw::Display {
     vnc.upcast()
 }
 
-fn spice_display(app: &gtk::Application, uri: glib::Uri) -> rdw::Display {
+fn spice_display(app: &adw::Application, uri: glib::Uri) -> rdw::Display {
     let spice = rdw_spice::Display::new();
     let session = spice.session();
 
@@ -207,7 +203,7 @@ fn spice_display(app: &gtk::Application, uri: glib::Uri) -> rdw::Display {
     spice.upcast()
 }
 
-fn make_display(app: &gtk::Application, mut uri: String) -> rdw::Display {
+fn make_display(app: &adw::Application, mut uri: String) -> rdw::Display {
     if glib::Uri::peek_scheme(&uri).is_none() {
         uri = format!("vnc://{}", uri);
     }
@@ -229,7 +225,7 @@ fn main() {
         rdw::setup_logger(log::logger(), log::max_level()).unwrap();
     }
 
-    let app = gtk::Application::new(
+    let app = adw::Application::new(
         Some("org.gnome.rdw.demo"),
         ApplicationFlags::NON_UNIQUE | ApplicationFlags::HANDLES_COMMAND_LINE,
     );
@@ -305,10 +301,10 @@ fn main() {
                     panic!("Failed to open USB dialog: {}", e);
                 }
             };
-            let dialog = gtk::Dialog::new();
+            let dialog = gtk::Window::new();
             dialog.set_transient_for(app.active_window().as_ref());
             dialog.set_child(Some(&usbredir));
-            dialog.show();
+            dialog.set_visible(true);
         }
     }));
     app.add_action(&action_usb);
@@ -319,16 +315,17 @@ fn main() {
     app.run();
 }
 
-fn build_ui(app: &gtk::Application, display: Arc<RefCell<Option<rdw::Display>>>) {
+fn build_ui(app: &adw::Application, display: Arc<RefCell<Option<rdw::Display>>>) {
     let ui_src = include_str!("demo.ui");
     let builder = gtk::Builder::new();
     builder
         .add_from_string(ui_src)
         .expect("Couldn't add from string");
-    let window: gtk::ApplicationWindow = builder.object("window").expect("Couldn't get window");
+    let window: adw::ApplicationWindow = builder.object("window").expect("Couldn't get window");
     window.set_application(Some(app));
 
     if let Some(display) = &*display.borrow() {
+        display.set_vexpand(true);
         display.connect_property_grabbed_notify(clone!(@weak window => move |d| {
             let mut title = "rdw demo".to_string();
             if !d.grabbed().is_empty() {
@@ -337,8 +334,9 @@ fn build_ui(app: &gtk::Application, display: Arc<RefCell<Option<rdw::Display>>>)
             window.set_title(Some(title.as_str()));
         }));
 
-        window.set_child(Some(display));
+        let view: gtk::Box = builder.object("view").expect("Couldn't get view");
+        view.append(display);
     }
 
-    window.show();
+    window.set_visible(true);
 }
