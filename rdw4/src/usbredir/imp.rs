@@ -106,7 +106,10 @@ pub struct UsbRedir {
     pub listbox: TemplateChild<gtk::ListBox>,
 
     #[template_child]
-    pub infobar: TemplateChild<gtk::InfoBar>,
+    pub infobar_revealer: TemplateChild<gtk::Revealer>,
+
+    #[template_child]
+    pub infobar_close: TemplateChild<gtk::Button>,
 
     #[template_child]
     pub error_label: TemplateChild<gtk::Label>,
@@ -126,7 +129,8 @@ impl Default for UsbRedir {
         Self {
             model: gio::ListStore::new(device::Device::static_type()),
             listbox: TemplateChild::default(),
-            infobar: TemplateChild::default(),
+            infobar_revealer: TemplateChild::default(),
+            infobar_close: TemplateChild::default(),
             error_label: TemplateChild::default(),
             free_label: TemplateChild::default(),
             ctxt: RefCell::default(),
@@ -180,7 +184,7 @@ impl ObjectImpl for UsbRedir {
                         let imp = inst.imp();
                         let msg: String = args[1].get().unwrap();
                         imp.error_label.set_label(&msg);
-                        imp.infobar.set_revealed(true);
+                        imp.infobar_revealer.set_reveal_child(true);
                         Some(true.to_value())
                     })
                     .accumulator(|_hint, ret, value| {
@@ -233,9 +237,10 @@ impl WidgetImpl for UsbRedir {
             }),
         );
 
-        self.infobar.connect_response(|infobar, _id| {
-            infobar.set_revealed(false);
-        });
+        self.infobar_close
+            .connect_clicked(clone!(@weak self as this => move |_| {
+                this.infobar_revealer.set_reveal_child(false);
+            }));
     }
 }
 

@@ -7,15 +7,34 @@
       </object>
     </property>
     <child>
-      <object class="GtkInfoBar" id="infobar">
-        <property name="revealed">0</property>
-        <property name="message-type">error</property>
-        <property name="show-close-button">1</property>
+      <object class="GtkBox" id="infobar">
         <child>
-          <object class="GtkLabel" id="error_label">
-            <property name="label" translatable="yes">Info</property>
+          <object class="GtkRevealer" id="infobar_revealer">
+            <child>
+              <object class="GtkBox">
+                <child>
+                  <object class="GtkLabel" id="error_label">
+                    <property name="label" translatable="yes">Info</property>
+                    <property name="hexpand">true</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkButton" id="infobar_close">
+                    <property name="icon-name">window-close-symbolic</property>
+                    <style>
+                      <class name="close"/>
+                    </style>
+                  </object>
+                </child>
+              </object>
+            </child>
           </object>
         </child>
+        <style>
+          <!-- FIXME: style is broken -->
+          <class name="infobar"/>
+          <class name="warning"/>
+        </style>
       </object>
     </child>
     <child>
