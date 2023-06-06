@@ -60,7 +60,7 @@ impl Framebuffer {
             .property("height", height)
             .property("rowstride", width * 4)
             .property("local-format", local_format)
-            .property("remove-format", remote_format)
+            .property("remote-format", remote_format)
             .build();
         fb.imp().buffer.set(buffer).unwrap();
         fb
