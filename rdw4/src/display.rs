@@ -95,6 +95,7 @@ pub mod imp {
         pub(crate) gl_area: OnceCell<gtk::GLArea>,
         pub(crate) layout_manager: OnceCell<gtk::BinLayout>,
 
+        pub(crate) read_only: Cell<bool>,
         // The remote display size, ex: 1024x768
         pub(crate) display_size: Cell<Option<(usize, usize)>>,
         pub(crate) last_resize_request: Cell<Option<(u32, u32, u32, u32)>>,
@@ -245,6 +246,7 @@ pub mod imp {
                         .nick("grabbed")
                         .blurb("Grabbed")
                         .read_only()
+                        .explicit_notify()
                         .default_value(Grab::empty())
                         .build(),
                     glib::ParamSpecUInt::builder("synthesize-delay")
@@ -256,6 +258,13 @@ pub mod imp {
                     glib::ParamSpecBoolean::builder("mouse-absolute")
                         .nick("Mouse absolute")
                         .blurb("Whether the mouse is absolute or relative")
+                        .construct()
+                        .build(),
+                    glib::ParamSpecBoolean::builder("read-only")
+                        .nick("Read-only")
+                        .blurb("Do no send input events")
+                        .explicit_notify()
+                        .default_value(false)
                         .construct()
                         .build(),
                 ]
@@ -282,6 +291,10 @@ pub mod imp {
 
                     self.mouse_absolute.set(absolute);
                 }
+                "read-only" => {
+                    let ro = value.get().unwrap();
+                    self.set_read_only(ro)
+                }
                 _ => unimplemented!(),
             }
         }
@@ -292,6 +305,7 @@ pub mod imp {
                 "grabbed" => self.grabbed.get().to_value(),
                 "synthesize-delay" => self.synthesize_delay.get().to_value(),
                 "mouse-absolute" => self.mouse_absolute.get().to_value(),
+                "read-only" => self.read_only().to_value(),
                 _ => unimplemented!(),
             }
         }
@@ -378,19 +392,14 @@ pub mod imp {
 
             let ec = gtk::EventControllerMotion::new();
             ec.connect_motion(clone!(@weak self as this => move |_, x, y| {
-                if let Some((x, y)) = this.transform_pos(x, y) {
-                    this.obj().emit_by_name::<()>("motion", &[&x, &y]);
-                }
+                this.do_motion(x, y)
             }));
             ec.connect_enter(clone!(@weak self as this => move |_, x, y| {
-                if let Some((x, y)) = this.transform_pos(x, y) {
-                    this.obj().emit_by_name::<()>("motion", &[&x, &y]);
-                }
+                this.do_motion(x, y)
             }));
             ec.connect_leave(clone!(@weak self as this => move |_| {
                 log::debug!("leave -> ungrab");
-                this.ungrab_keyboard();
-                this.ungrab_mouse();
+                this.ungrab();
             }));
             self.obj().add_controller(ec);
 
@@ -406,24 +415,20 @@ pub mod imp {
                     }
 
                     let button = gesture.current_button();
-                    if let Some((x, y)) = this.transform_pos(x, y) {
-                        this.obj().emit_by_name::<()>("motion", &[&x, &y]);
-                    }
-                    this.obj().emit_by_name::<()>("mouse-press", &[&button]);
+                    this.do_motion(x, y);
+                    this.do_mouse_press(button);
                 }),
             );
             ec.connect_released(
                 clone!(@weak self as this => move |gesture, _n_press, x, y| {
                     let button = gesture.current_button();
-                    if let Some((x, y)) = this.transform_pos(x, y) {
-                        this.obj().emit_by_name::<()>("motion", &[&x, &y]);
-                    }
-                    this.obj().emit_by_name::<()>("mouse-release", &[&button]);
+                    this.do_motion(x, y);
+                    this.do_mouse_release(button);
                 }),
             );
             ec.connect_cancel(clone!(@weak self as this => move |gesture, _| {
                 let button = gesture.current_button();
-                this.obj().emit_by_name::<()>("mouse-release", &[&button]);
+                this.do_mouse_release(button);
             }));
             self.obj().add_controller(ec);
 
@@ -434,14 +439,14 @@ pub mod imp {
             ec.connect_scroll(
                 clone!(@weak self as this => @default-panic, move |_, dx, dy| {
                     if dy >= 1.0 {
-                        this.obj().emit_by_name::<()>("scroll-discrete", &[&Scroll::Down]);
+                        this.do_scroll_discrete(Scroll::Down);
                     } else if dy <= -1.0 {
-                        this.obj().emit_by_name::<()>("scroll-discrete", &[&Scroll::Up]);
+                        this.do_scroll_discrete(Scroll::Up);
                     }
                     if dx >= 1.0 {
-                        this.obj().emit_by_name::<()>("scroll-discrete", &[&Scroll::Right]);
+                        this.do_scroll_discrete(Scroll::Right);
                     } else if dx <= -1.0 {
-                        this.obj().emit_by_name::<()>("scroll-discrete", &[&Scroll::Left]);
+                        this.do_scroll_discrete(Scroll::Left);
                     }
                     glib::signal::Inhibit(false)
                 }),
@@ -491,10 +496,7 @@ pub mod imp {
                                        let (geom, wmm, hmm) = (m.geometry(), m.width_mm() as u32, m.height_mm() as u32);
                                        (wmm * width / (geom.width() as u32), hmm * height / geom.height() as u32)
                                    }).unwrap_or((0u32, 0u32));
-                    if Some((width, height, w_mm, h_mm)) != this.last_resize_request.get() {
-                        this.last_resize_request.set(Some((width, height, w_mm, h_mm)));
-                        this.obj().emit_by_name::<()>("resize-request", &[&width, &height, &w_mm, &h_mm]);
-                    }
+                    this.do_resize_request(width, height, w_mm, h_mm);
                     this.resize_timeout_id.set(None);
                     glib::Continue(false)
                 }),
@@ -538,6 +540,97 @@ pub mod imp {
     }
 
     impl Display {
+        fn set_read_only(&self, ro: bool) {
+            if ro == self.read_only() {
+                return;
+            }
+            if ro {
+                self.ungrab();
+            }
+            self.read_only.set(ro);
+            self.obj().notify("read-only");
+        }
+
+        fn read_only(&self) -> bool {
+            self.read_only.get()
+        }
+
+        fn do_motion(&self, x: f64, y: f64) {
+            if self.read_only() {
+                return;
+            }
+            if let Some((x, y)) = self.transform_pos(x, y) {
+                self.obj().emit_by_name::<()>("motion", &[&x, &y]);
+            }
+        }
+
+        pub(crate) fn do_motion_relative(&self, dx: f64, dy: f64) {
+            if self.read_only() {
+                return;
+            }
+            self.obj()
+                .emit_by_name::<()>("motion-relative", &[&dx, &dy]);
+        }
+
+        fn do_mouse_press(&self, button: u32) {
+            if self.read_only() {
+                return;
+            }
+            self.obj().emit_by_name::<()>("mouse-press", &[&button])
+        }
+
+        fn do_mouse_release(&self, button: u32) {
+            if self.read_only() {
+                return;
+            }
+            self.obj().emit_by_name::<()>("mouse-release", &[&button])
+        }
+
+        fn do_scroll_discrete(&self, dir: Scroll) {
+            self.obj().emit_by_name::<()>("scroll-discrete", &[&dir])
+        }
+
+        fn do_key_press(&self, keyval: gdk::Key, keycode: u32) {
+            if self.read_only() {
+                return;
+            }
+            self.obj()
+                .emit_by_name::<()>("key-event", &[&keyval, &keycode, &KeyEvent::PRESS])
+        }
+
+        fn do_key_release(&self, keyval: gdk::Key, keycode: u32) {
+            if self.read_only() {
+                return;
+            }
+            self.obj()
+                .emit_by_name::<()>("key-event", &[&keyval, &keycode, &KeyEvent::RELEASE])
+        }
+
+        fn do_key_press_and_release(&self, keyval: gdk::Key, keycode: u32) {
+            if self.read_only() {
+                return;
+            }
+            self.obj().emit_by_name::<()>(
+                "key-event",
+                &[&keyval, &keycode, &(KeyEvent::PRESS | KeyEvent::RELEASE)],
+            )
+        }
+
+        fn do_resize_request(&self, width: u32, height: u32, w_mm: u32, h_mm: u32) {
+            if self.read_only() {
+                return;
+            }
+
+            let req = Some((width, height, w_mm, h_mm));
+            if req == self.last_resize_request.get() {
+                return;
+            }
+            self.last_resize_request.set(req);
+
+            self.obj()
+                .emit_by_name::<()>("resize-request", &[&width, &height, &w_mm, &h_mm]);
+        }
+
         pub(crate) fn make_current(&self) {
             let area = self.gl_area();
             area.make_current();
@@ -634,7 +727,7 @@ pub mod imp {
                         let (dx, dy) = (input.data.mouse.lLastX, input.data.mouse.lLastY);
                         let scale = this.obj().scale_factor() as f64;
                         let (dx, dy) = (dx as f64 / scale, dy as f64 / scale);
-                        this.obj().emit_by_name::<()>("motion-relative", &[&dx, &dy]);
+                        this.do_motion_relative(dx, dy);
                     }
                 }
 
@@ -791,18 +884,6 @@ pub mod imp {
             }
         }
 
-        fn key_press(&self, keyval: gdk::Key, keycode: u32) {
-            self.keys_pressed.borrow_mut().insert((keyval, keycode));
-            self.obj()
-                .emit_by_name::<()>("key-event", &[&keyval, &keycode, &KeyEvent::PRESS]);
-        }
-
-        fn key_release(&self, keyval: gdk::Key, keycode: u32) {
-            self.keys_pressed.borrow_mut().remove(&(keyval, keycode));
-            self.obj()
-                .emit_by_name::<()>("key-event", &[&keyval, &keycode, &KeyEvent::RELEASE])
-        }
-
         fn clear_last_key_press(&self) {
             self.last_key_press.set(None);
             if let Some(timeout_id) = self.last_key_press_timeout.take() {
@@ -812,18 +893,25 @@ pub mod imp {
 
         fn release_keys(&self) {
             self.clear_last_key_press();
-            for key in self.keys_pressed.take() {
-                self.key_release(key.0, key.1);
+            for (keyval, keycode) in self.keys_pressed.take() {
+                self.keys_pressed.borrow_mut().remove(&(keyval, keycode));
+                self.do_key_release(keyval, keycode)
             }
             self.keys_pressed.borrow_mut().clear();
         }
 
         fn emit_last_key_press(&self) {
             if let Some((keyval, keycode)) = self.last_key_press.take() {
-                self.key_press(keyval, keycode);
+                self.keys_pressed.borrow_mut().insert((keyval, keycode));
+                self.do_key_press(keyval, keycode)
             }
 
             self.clear_last_key_press();
+        }
+
+        fn ungrab(&self) {
+            self.ungrab_keyboard();
+            self.ungrab_mouse();
         }
 
         fn key_pressed(&self, ec: &gtk::EventControllerKey, keyval: gdk::Key, keycode: u32) {
@@ -831,10 +919,8 @@ pub mod imp {
                 if self.grab_shortcut.get().unwrap().trigger(e, false) == gdk::KeyMatch::Exact {
                     if self.grabbed.get().is_empty() {
                         self.try_grab();
-                        return;
                     } else {
-                        self.ungrab_keyboard();
-                        self.ungrab_mouse();
+                        self.ungrab();
                     }
                 }
             }
@@ -858,23 +944,15 @@ pub mod imp {
             if let Some((last_keyval, last_keycode)) = self.last_key_press.get() {
                 if (last_keyval, last_keycode) == (keyval, keycode) {
                     self.clear_last_key_press();
-
-                    self.obj().emit_by_name::<()>(
-                        "key-event",
-                        &[
-                            &keyval.into_glib(),
-                            &keycode,
-                            &(KeyEvent::PRESS | KeyEvent::RELEASE),
-                        ],
-                    );
-                    return;
+                    self.do_key_press_and_release(keyval, keycode);
                 }
             }
 
             // flush pending key event
             self.emit_last_key_press();
 
-            self.key_release(keyval, keycode);
+            self.keys_pressed.borrow_mut().remove(&(keyval, keycode));
+            self.do_key_release(keyval, keycode)
         }
 
         fn try_grab_keyboard(&self) -> bool {
@@ -1415,7 +1493,7 @@ impl wayland_client::Dispatch<ZwpRelativePointerV1, ()> for Display {
         {
             let scale = obj.scale_factor() as f64;
             let (dx, dy) = (dx_unaccel / scale, dy_unaccel / scale);
-            obj.emit_by_name::<()>("motion-relative", &[&dx, &dy]);
+            obj.imp().do_motion_relative(dx, dy)
         }
     }
 }
@@ -1499,6 +1577,8 @@ pub trait DisplayExt: 'static {
     fn connect_mouse_release<F: Fn(&Self, u32) + 'static>(&self, f: F) -> SignalHandlerId;
 
     fn connect_scroll_discrete<F: Fn(&Self, Scroll) + 'static>(&self, f: F) -> SignalHandlerId;
+
+    fn connect_property_read_only_notify<F: Fn(&Self) + 'static>(&self, f: F) -> SignalHandlerId;
 
     fn connect_property_grabbed_notify<F: Fn(&Self) + 'static>(&self, f: F) -> SignalHandlerId;
 
@@ -2011,6 +2091,31 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
             )
         }
     }
+
+    fn connect_property_read_only_notify<F: Fn(&Self) + 'static>(&self, f: F) -> SignalHandlerId {
+        unsafe extern "C" fn notify_trampoline<P, F: Fn(&P) + 'static>(
+            this: *mut RdwDisplay,
+            _param_spec: glib::ffi::gpointer,
+            f: glib::ffi::gpointer,
+        ) where
+            P: IsA<Display>,
+        {
+            let f: &F = &*(f as *const F);
+            f(Display::from_glib_borrow(this).unsafe_cast_ref())
+        }
+        unsafe {
+            let f: Box<F> = Box::new(f);
+            glib::signal::connect_raw(
+                self.as_ptr() as *mut _,
+                b"notify::read-only\0".as_ptr() as *const _,
+                Some(std::mem::transmute::<_, unsafe extern "C" fn()>(
+                    notify_trampoline::<Self, F> as *const (),
+                )),
+                Box::into_raw(f),
+            )
+        }
+    }
+
     fn connect_resize_request<F: Fn(&Self, u32, u32, u32, u32) + 'static>(
         &self,
         f: F,
