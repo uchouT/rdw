@@ -21,6 +21,18 @@ pub extern "C" fn rdw_display_get_type() -> glib::ffi::GType {
     <crate::Display as glib::types::StaticType>::static_type().into_glib()
 }
 
+/// rdw_shot_widget:
+/// @widget: A #GtkWidget
+///
+/// Returns: (nullable) (transfer full): a #GdkPixbuf
+#[no_mangle]
+pub extern "C" fn rdw_shot_widget(
+    widget: *mut gtk::ffi::GtkWidget,
+) -> *mut gtk::gdk_pixbuf::ffi::GdkPixbuf {
+    let w: &gtk::Widget = unsafe { &from_glib_borrow(widget) };
+    Display::shot_widget(w).to_glib_full()
+}
+
 /// rdw_display_get_display_size:
 /// @dpy: A #RdwDisplay
 /// @width: (out): display width

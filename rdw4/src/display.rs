@@ -1332,6 +1332,36 @@ impl Display {
         let tex = gdk::Texture::for_pixbuf(&pb);
         gdk::Cursor::from_texture(&tex, hot_x * scale, hot_y * scale, None)
     }
+
+    pub fn shot_widget(widget: &gtk::Widget) -> Option<gdk::gdk_pixbuf::Pixbuf> {
+        use gdk::gdk_pixbuf::*;
+
+        let snap = gtk::Snapshot::new();
+        let Some(parent) = widget.parent() else {
+            return None;
+        };
+        let Some(native) = widget.native() else {
+            return None;
+        };
+        parent.snapshot_child(widget, &snap);
+        let Some(node) = snap.to_node() else {
+            return None;
+        };
+        let texture = native.renderer().render_texture(node, None);
+        let mut down = gdk::TextureDownloader::new(&texture);
+        down.set_format(gdk::MemoryFormat::R8g8b8a8);
+        let (bytes, stride) = down.download_bytes();
+
+        Some(Pixbuf::from_bytes(
+            &bytes,
+            Colorspace::Rgb,
+            true,
+            8,
+            texture.width(),
+            texture.height(),
+            stride as _,
+        ))
+    }
 }
 
 #[cfg(not(feature = "bindings"))]
