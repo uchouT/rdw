@@ -1569,6 +1569,8 @@ impl wayland_client::Dispatch<ZwpLockedPointerV1, ()> for Display {
 pub const NONE_DISPLAY: Option<&Display> = None;
 
 pub trait DisplayExt: 'static {
+    fn read_only(&self) -> bool;
+
     fn send_keys(&self, keyvals: &[gdk::Key]);
 
     fn display_size(&self) -> Option<(usize, usize)>;
@@ -1628,6 +1630,10 @@ pub trait DisplayExt: 'static {
 }
 
 impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O {
+    fn read_only(&self) -> bool {
+        self.property("read-only")
+    }
+
     fn send_keys(&self, keyvals: &[gdk::Key]) {
         // Safety: safe because IsA<Display>
         let self_: &Display = unsafe { self.unsafe_cast_ref::<Display>() };

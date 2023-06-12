@@ -258,6 +258,32 @@ mod imp {
             self.connection.connect_vnc_auth_credential(|_, va| {
                 log::debug!("auth-credential: {:?}", va);
             });
+
+            // TODO: gvnc doesn't support EXT_CLIPBOARD 0xc0a1e5ce
+            self.connection.connect_vnc_server_cut_text(
+                clone!(@weak self as this => move |_, text| {
+                    if this.obj().read_only() {
+                        return;
+                    }
+                    log::debug!("server-cut-text, {}", text);
+                    this.obj().clipboard().set_text(text);
+                }),
+            );
+
+            self.obj()
+                .clipboard()
+                .connect_changed(clone!(@weak self as this => move |_| {
+                    if this.obj().read_only() {
+                        return;
+                    }
+                    glib::MainContext::default().spawn_local(clone!(@weak this => async move {
+                        let Ok(Some(text)) = this.obj().clipboard().read_text_future().await else {
+                            return;
+                        };
+                        log::debug!("client-cut-text, {}", text);
+                        this.connection.client_cut_text(&text);
+                    }));
+                }));
         }
     }
 
