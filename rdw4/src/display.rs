@@ -95,6 +95,7 @@ pub mod imp {
         pub(crate) gl_area: OnceCell<gtk::GLArea>,
         pub(crate) layout_manager: OnceCell<gtk::BinLayout>,
 
+        pub(crate) scaling: Cell<bool>,
         pub(crate) show_local_cursor: Cell<bool>,
         pub(crate) read_only: Cell<bool>,
         // The remote display size, ex: 1024x768
@@ -275,6 +276,13 @@ pub mod imp {
                         .default_value(false)
                         .construct()
                         .build(),
+                    glib::ParamSpecBoolean::builder("scaling")
+                        .nick("Scaling")
+                        .blurb("Scale display")
+                        .explicit_notify()
+                        .default_value(true)
+                        .construct()
+                        .build(),
                 ]
             });
             PROPERTIES.as_ref()
@@ -307,6 +315,10 @@ pub mod imp {
                     let val = value.get().unwrap();
                     self.set_show_local_cursor(val)
                 }
+                "scaling" => {
+                    let val = value.get().unwrap();
+                    self.set_scaling(val)
+                }
                 _ => unimplemented!(),
             }
         }
@@ -319,6 +331,7 @@ pub mod imp {
                 "mouse-absolute" => self.mouse_absolute.get().to_value(),
                 "read-only" => self.read_only().to_value(),
                 "show-local-cursor" => self.show_local_cursor().to_value(),
+                "scaling" => self.scaling().to_value(),
                 _ => unimplemented!(),
             }
         }
@@ -468,7 +481,7 @@ pub mod imp {
         }
 
         fn measure(&self, orientation: gtk::Orientation, _for_size: i32) -> (i32, i32, i32, i32) {
-            let (minimum, mut natural, minimum_baseline, natural_baseline) = (128, 128, -1, -1);
+            let (mut minimum, mut natural, minimum_baseline, natural_baseline) = (128, 128, -1, -1);
 
             // TODO: doesn't work as expected yet
             if let Some((w, h)) = self.display_size.get() {
@@ -481,6 +494,10 @@ pub mod imp {
                     }
                     _ => panic!(),
                 }
+            }
+
+            if !self.scaling() {
+                minimum = natural;
             }
 
             (minimum, natural, minimum_baseline, natural_baseline)
@@ -553,6 +570,24 @@ pub mod imp {
     }
 
     impl Display {
+        fn set_scaling(&self, scaling: bool) {
+            if scaling == self.scaling() {
+                return;
+            }
+            if scaling {
+                self.obj().set_size_request(-1, -1);
+            } else if let Some((width, height)) = self.obj().display_size() {
+                self.obj().set_size_request(width as _, height as _);
+            }
+            self.scaling.set(scaling);
+            self.obj().notify("scaling");
+            self.obj().queue_resize();
+        }
+
+        fn scaling(&self) -> bool {
+            self.scaling.get()
+        }
+
         fn set_show_local_cursor(&self, show: bool) {
             if show == self.show_local_cursor() {
                 return;
@@ -1218,7 +1253,7 @@ pub mod imp {
             }
         }
 
-        fn borders(&self) -> (u32, u32) {
+        fn borders(&self) -> (i32, i32) {
             let obj = self.obj();
             let (dw, dh) = match obj.display_size() {
                 Some(size) => size,
@@ -1226,14 +1261,21 @@ pub mod imp {
             };
             let sf = obj.scale_factor();
             let (w, h) = (obj.width() * sf, obj.height() * sf);
-            let (sw, sh) = (w as f32 / dw as f32, h as f32 / dh as f32);
 
+            if !self.scaling() {
+                let (dw, dh) = (dw as _, dh as _);
+                let bw = if w > dw { w - dw } else { 0 };
+                let bh = if h > dh { h - dh } else { 0 };
+                return (bw / 2, bh / 2);
+            }
+
+            let (sw, sh) = (w as f32 / dw as f32, h as f32 / dh as f32);
             if sw < sh {
                 let bh = h - (h as f32 * sw / sh) as i32;
-                (0, bh as u32 / 2)
+                (0, bh / 2)
             } else {
                 let bw = w - (w as f32 * sh / sw) as i32;
-                (bw as u32 / 2, 0)
+                (bw / 2, 0)
             }
         }
 
@@ -1244,7 +1286,6 @@ pub mod imp {
             let sf = obj.scale_factor();
             let (w, h) = (obj.width() * sf, obj.height() * sf);
             let (borderw, borderh) = self.borders();
-            let (borderw, borderh) = (borderw as i32, borderh as i32);
             Some(gdk::Rectangle::new(
                 borderw,
                 borderh,
