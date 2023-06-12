@@ -95,6 +95,7 @@ pub mod imp {
         pub(crate) gl_area: OnceCell<gtk::GLArea>,
         pub(crate) layout_manager: OnceCell<gtk::BinLayout>,
 
+        pub(crate) show_local_cursor: Cell<bool>,
         pub(crate) read_only: Cell<bool>,
         // The remote display size, ex: 1024x768
         pub(crate) display_size: Cell<Option<(usize, usize)>>,
@@ -267,6 +268,13 @@ pub mod imp {
                         .default_value(false)
                         .construct()
                         .build(),
+                    glib::ParamSpecBoolean::builder("show-local-cursor")
+                        .nick("Show local cursor")
+                        .blurb("Show local cursor")
+                        .explicit_notify()
+                        .default_value(false)
+                        .construct()
+                        .build(),
                 ]
             });
             PROPERTIES.as_ref()
@@ -295,6 +303,10 @@ pub mod imp {
                     let ro = value.get().unwrap();
                     self.set_read_only(ro)
                 }
+                "show-local-cursor" => {
+                    let val = value.get().unwrap();
+                    self.set_show_local_cursor(val)
+                }
                 _ => unimplemented!(),
             }
         }
@@ -306,6 +318,7 @@ pub mod imp {
                 "synthesize-delay" => self.synthesize_delay.get().to_value(),
                 "mouse-absolute" => self.mouse_absolute.get().to_value(),
                 "read-only" => self.read_only().to_value(),
+                "show-local-cursor" => self.show_local_cursor().to_value(),
                 _ => unimplemented!(),
             }
         }
@@ -540,6 +553,24 @@ pub mod imp {
     }
 
     impl Display {
+        fn set_show_local_cursor(&self, show: bool) {
+            if show == self.show_local_cursor() {
+                return;
+            }
+            self.show_local_cursor.set(show);
+            if show {
+                self.gl_area().set_cursor(None);
+            } else {
+                self.try_hide_cursor();
+                self.obj().define_cursor(self.cursor.take())
+            }
+            self.obj().notify("show-local-cursor");
+        }
+
+        fn show_local_cursor(&self) -> bool {
+            self.show_local_cursor.get()
+        }
+
         fn set_read_only(&self, ro: bool) {
             if ro == self.read_only() {
                 return;
@@ -1143,6 +1174,13 @@ pub mod imp {
             }
         }
 
+        fn try_hide_cursor(&self) {
+            if self.show_local_cursor() {
+                return;
+            }
+            self.gl_area().set_cursor_from_name(Some("none"));
+        }
+
         fn try_grab(&self) -> Grab {
             let mut grabbed = Default::default();
             if self.try_grab_keyboard() {
@@ -1151,8 +1189,7 @@ pub mod imp {
             if self.try_grab_mouse() {
                 grabbed |= Grab::MOUSE;
                 if !self.obj().mouse_absolute() {
-                    // hide client mouse
-                    self.gl_area().set_cursor_from_name(Some("none"));
+                    self.try_hide_cursor();
                 }
                 self.obj().queue_draw(); // update cursor
             }
