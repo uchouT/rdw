@@ -2,6 +2,7 @@ use gtk::{
     gdk,
     glib::{self, translate::*},
 };
+use std::ptr;
 
 use crate::display::*;
 
@@ -31,6 +32,20 @@ pub extern "C" fn rdw_shot_widget(
 ) -> *mut gtk::gdk_pixbuf::ffi::GdkPixbuf {
     let w: &gtk::Widget = unsafe { &from_glib_borrow(widget) };
     Display::shot_widget(w).to_glib_full()
+}
+
+/// rdw_display_send_keys:
+/// @dpy: A #RdwDisplay
+/// @keys: (array length=nkeys): an array of GDK keyvals
+/// @nkeys: the number of elements in @keys
+#[no_mangle]
+pub extern "C" fn rdw_display_send_keys(dpy: *mut RdwDisplay, keys: *mut u32, nkeys: usize) {
+    let this: &Display = unsafe { &from_glib_borrow(dpy) };
+    let mut res = Vec::with_capacity(nkeys);
+    for i in 0..nkeys {
+        res.push(unsafe { from_glib(ptr::read(keys.add(i))) });
+    }
+    this.send_keys(&res);
 }
 
 /// rdw_display_get_display_size:

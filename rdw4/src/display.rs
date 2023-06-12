@@ -621,7 +621,7 @@ pub mod imp {
             self.obj().emit_by_name::<()>("scroll-discrete", &[&dir])
         }
 
-        fn do_key_press(&self, keyval: gdk::Key, keycode: u32) {
+        pub(crate) fn do_key_press(&self, keyval: gdk::Key, keycode: u32) {
             if self.read_only() {
                 return;
             }
@@ -629,7 +629,7 @@ pub mod imp {
                 .emit_by_name::<()>("key-event", &[&keyval, &keycode, &KeyEvent::PRESS])
         }
 
-        fn do_key_release(&self, keyval: gdk::Key, keycode: u32) {
+        pub(crate) fn do_key_release(&self, keyval: gdk::Key, keycode: u32) {
             if self.read_only() {
                 return;
             }
@@ -637,7 +637,7 @@ pub mod imp {
                 .emit_by_name::<()>("key-event", &[&keyval, &keycode, &KeyEvent::RELEASE])
         }
 
-        fn do_key_press_and_release(&self, keyval: gdk::Key, keycode: u32) {
+        pub(crate) fn do_key_press_and_release(&self, keyval: gdk::Key, keycode: u32) {
             if self.read_only() {
                 return;
             }
@@ -1569,6 +1569,8 @@ impl wayland_client::Dispatch<ZwpLockedPointerV1, ()> for Display {
 pub const NONE_DISPLAY: Option<&Display> = None;
 
 pub trait DisplayExt: 'static {
+    fn send_keys(&self, keyvals: &[gdk::Key]);
+
     fn display_size(&self) -> Option<(usize, usize)>;
 
     fn set_display_size(&self, size: Option<(usize, usize)>);
@@ -1626,6 +1628,41 @@ pub trait DisplayExt: 'static {
 }
 
 impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O {
+    fn send_keys(&self, keyvals: &[gdk::Key]) {
+        // Safety: safe because IsA<Display>
+        let self_: &Display = unsafe { self.unsafe_cast_ref::<Display>() };
+
+        #[cfg(feature = "bindings")]
+        unsafe {
+            let mut res = Vec::with_capacity(keyvals.len());
+            for k in keyvals {
+                res.push(k.into_glib());
+            }
+            ffi::rdw_display_send_keys(self_.to_glib_none().0, res.as_mut_ptr(), keyvals.len());
+        }
+        #[cfg(not(feature = "bindings"))]
+        {
+            macro_rules! process_keys {
+                ($self:ident, $keyvals:expr, $operation:ident) => {
+                    let imp = self_.imp();
+                    for &kv in $keyvals {
+                        // todo: group & level might be necessary, some day
+                        if let Some(kks) = $self.display().map_keyval(kv) {
+                            for kk in kks {
+                                imp.$operation(kv, kk.keycode());
+                            }
+                        } else {
+                            log::warn!("Failed to send key {:?}", kv);
+                        }
+                    }
+                };
+            }
+
+            process_keys!(self, keyvals.iter(), do_key_press);
+            process_keys!(self, keyvals.iter().rev(), do_key_release);
+        }
+    }
+
     fn display_size(&self) -> Option<(usize, usize)> {
         // Safety: safe because IsA<Display>
         let self_: &Display = unsafe { self.unsafe_cast_ref::<Display>() };
@@ -2208,6 +2245,8 @@ mod ffi {
 
     extern "C" {
         pub fn rdw_display_get_type() -> glib::ffi::GType;
+
+        pub fn rdw_display_send_keys(dpy: *mut RdwDisplay, keys: *mut u32, nkeys: usize);
 
         pub fn rdw_display_get_display_size(
             dpy: *mut RdwDisplay,
