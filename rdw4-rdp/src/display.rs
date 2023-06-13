@@ -437,7 +437,7 @@ mod imp {
                         let _ = this.send_event(Event::ClipboardData(data)).await;
                     }));
                 }
-                RdpEvent::Eol => {}
+                RdpEvent::Eol => { self.set_connected(false) },
             }
         }
 
