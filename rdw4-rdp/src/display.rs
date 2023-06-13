@@ -114,16 +114,20 @@ mod imp {
 
     impl Default for Display {
         fn default() -> Self {
-            let (tx, rx) = futures::channel::mpsc::unbounded();
-            let mut context = Context::new(RdpContextHandler::new(tx));
-            context.settings.set_support_display_control(true);
-            context
-                .settings
-                .set_os_major_type(freerdp::sys::OSMAJORTYPE_UNIX);
-            context
-                .settings
-                .set_os_minor_type(freerdp::sys::OSMINORTYPE_NATIVE_WAYLAND);
+            fn new_context() -> (Box<Context<RdpContextHandler>>, UnboundedReceiver<RdpEvent>){
+                let (tx, rx) = futures::channel::mpsc::unbounded();
+                let mut context = Context::new(RdpContextHandler::new(tx));
+                context.settings.set_support_display_control(true);
+                context
+                    .settings
+                    .set_os_major_type(freerdp::sys::OSMAJORTYPE_UNIX);
+                context
+                    .settings
+                    .set_os_minor_type(freerdp::sys::OSMINORTYPE_NATIVE_WAYLAND);
+                (context, rx)
+            }
 
+            let (context, rx) = new_context();
             Self {
                 context: Arc::new(Mutex::new(context)),
                 state: RefCell::new(None),
