@@ -244,14 +244,6 @@ mod imp {
                     }));
                 }),
             );
-        }
-    }
-
-    impl WidgetImpl for Display {
-        fn realize(&self) {
-            self.parent_realize();
-
-            self.keymap.set(rdw::keymap_xtkbd());
 
             let ec = gtk::EventControllerScroll::new(gtk::EventControllerScrollFlags::BOTH_AXES);
             ec.connect_scroll(
@@ -292,8 +284,15 @@ mod imp {
                     }
                 }
             }));
-
             self.clipboard.watch_id.set(Some(watch_id));
+        }
+    }
+
+    impl WidgetImpl for Display {
+        fn realize(&self) {
+            self.parent_realize();
+
+            self.keymap.set(rdw::keymap_xtkbd());
         }
     }
 

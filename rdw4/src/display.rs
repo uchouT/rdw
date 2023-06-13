@@ -197,6 +197,11 @@ pub mod imp {
     impl ObjectImpl for Display {
         fn constructed(&self) {
             self.parent_constructed();
+
+            self.obj().set_sensitive(true);
+            self.obj().set_focusable(true);
+            self.obj().set_focus_on_click(true);
+
             self.layout_manager.set(gtk::BinLayout::new()).unwrap();
 
             let gl_area = gtk::GLArea::new();
@@ -225,6 +230,92 @@ pub mod imp {
             self.grab_shortcut.get_or_init(|| {
                 gtk::ShortcutTrigger::parse_string("<Ctrl>Alt_L|<Alt>Control_L").unwrap()
             });
+
+            let ec = gtk::EventControllerFocus::new();
+            ec.connect_leave(clone!(@weak self as this => @default-panic, move |_ec| {
+                this.release_keys();
+            }));
+            self.obj().add_controller(ec);
+
+            self.gl_area().set_parent(&*self.obj());
+
+            let ec = gtk::EventControllerKey::new();
+            ec.set_propagation_phase(gtk::PropagationPhase::Capture);
+            ec.connect_key_pressed(
+                clone!(@weak self as this => @default-panic, move |ec, keyval, keycode, _state| {
+                    this.key_pressed(ec, keyval, keycode);
+                    glib::signal::Inhibit(true)
+                }),
+            );
+            ec.connect_key_released(
+                clone!(@weak self as this => move |_, keyval, keycode, _state| {
+                    this.key_released(keyval, keycode);
+                }),
+            );
+            self.obj().add_controller(ec);
+
+            let ec = gtk::EventControllerMotion::new();
+            ec.connect_motion(clone!(@weak self as this => move |_, x, y| {
+                this.do_motion(x, y)
+            }));
+            ec.connect_enter(clone!(@weak self as this => move |_, x, y| {
+                this.do_motion(x, y)
+            }));
+            ec.connect_leave(clone!(@weak self as this => move |_| {
+                log::debug!("leave -> ungrab");
+                this.ungrab();
+            }));
+            self.obj().add_controller(ec);
+
+            let ec = gtk::GestureClick::new();
+            ec.set_button(0);
+            ec.connect_pressed(
+                clone!(@weak self as this => @default-panic, move |gesture, _n_press, x, y| {
+                    let grabbed = this.try_grab();
+
+                    if grabbed.contains(Grab::MOUSE) {
+                        log::debug!("Skipping mouse-press, since we took the grab");
+                        return;
+                    }
+
+                    let button = gesture.current_button();
+                    this.do_motion(x, y);
+                    this.do_mouse_press(button);
+                }),
+            );
+            ec.connect_released(
+                clone!(@weak self as this => move |gesture, _n_press, x, y| {
+                    let button = gesture.current_button();
+                    this.do_motion(x, y);
+                    this.do_mouse_release(button);
+                }),
+            );
+            ec.connect_cancel(clone!(@weak self as this => move |gesture, _| {
+                let button = gesture.current_button();
+                this.do_mouse_release(button);
+            }));
+            self.obj().add_controller(ec);
+
+            let ec = gtk::EventControllerScroll::new(
+                gtk::EventControllerScrollFlags::BOTH_AXES
+                    | gtk::EventControllerScrollFlags::DISCRETE,
+            );
+            ec.connect_scroll(
+                clone!(@weak self as this => @default-panic, move |_, dx, dy| {
+                    if dy >= 1.0 {
+                        this.do_scroll_discrete(Scroll::Down);
+                    } else if dy <= -1.0 {
+                        this.do_scroll_discrete(Scroll::Up);
+                    }
+                    if dx >= 1.0 {
+                        this.do_scroll_discrete(Scroll::Right);
+                    } else if dx <= -1.0 {
+                        this.do_scroll_discrete(Scroll::Left);
+                    }
+                    glib::signal::Inhibit(false)
+                }),
+            );
+            self.obj().add_controller(ec);
         }
 
         fn dispose(&self) {
@@ -379,18 +470,6 @@ pub mod imp {
         fn realize(&self) {
             self.parent_realize();
 
-            self.obj().set_sensitive(true);
-            self.obj().set_focusable(true);
-            self.obj().set_focus_on_click(true);
-
-            let ec = gtk::EventControllerFocus::new();
-            ec.connect_leave(clone!(@weak self as this => @default-panic, move |_ec| {
-                this.release_keys();
-            }));
-            self.obj().add_controller(ec);
-
-            self.gl_area().set_parent(&*self.obj());
-
             #[cfg(unix)]
             if let Ok(dpy) = self.obj().display().downcast::<gdk_wl::WaylandDisplay>() {
                 self.realize_wl(&dpy);
@@ -400,84 +479,6 @@ pub mod imp {
             if let Ok(dpy) = self.obj().display().downcast::<gdk_win32::Win32Display>() {
                 self.realize_win32(&dpy);
             }
-
-            let ec = gtk::EventControllerKey::new();
-            ec.set_propagation_phase(gtk::PropagationPhase::Capture);
-            ec.connect_key_pressed(
-                clone!(@weak self as this => @default-panic, move |ec, keyval, keycode, _state| {
-                    this.key_pressed(ec, keyval, keycode);
-                    glib::signal::Inhibit(true)
-                }),
-            );
-            ec.connect_key_released(
-                clone!(@weak self as this => move |_, keyval, keycode, _state| {
-                    this.key_released(keyval, keycode);
-                }),
-            );
-            self.obj().add_controller(ec);
-
-            let ec = gtk::EventControllerMotion::new();
-            ec.connect_motion(clone!(@weak self as this => move |_, x, y| {
-                this.do_motion(x, y)
-            }));
-            ec.connect_enter(clone!(@weak self as this => move |_, x, y| {
-                this.do_motion(x, y)
-            }));
-            ec.connect_leave(clone!(@weak self as this => move |_| {
-                log::debug!("leave -> ungrab");
-                this.ungrab();
-            }));
-            self.obj().add_controller(ec);
-
-            let ec = gtk::GestureClick::new();
-            ec.set_button(0);
-            ec.connect_pressed(
-                clone!(@weak self as this => @default-panic, move |gesture, _n_press, x, y| {
-                    let grabbed = this.try_grab();
-
-                    if grabbed.contains(Grab::MOUSE) {
-                        log::debug!("Skipping mouse-press, since we took the grab");
-                        return;
-                    }
-
-                    let button = gesture.current_button();
-                    this.do_motion(x, y);
-                    this.do_mouse_press(button);
-                }),
-            );
-            ec.connect_released(
-                clone!(@weak self as this => move |gesture, _n_press, x, y| {
-                    let button = gesture.current_button();
-                    this.do_motion(x, y);
-                    this.do_mouse_release(button);
-                }),
-            );
-            ec.connect_cancel(clone!(@weak self as this => move |gesture, _| {
-                let button = gesture.current_button();
-                this.do_mouse_release(button);
-            }));
-            self.obj().add_controller(ec);
-
-            let ec = gtk::EventControllerScroll::new(
-                gtk::EventControllerScrollFlags::BOTH_AXES
-                    | gtk::EventControllerScrollFlags::DISCRETE,
-            );
-            ec.connect_scroll(
-                clone!(@weak self as this => @default-panic, move |_, dx, dy| {
-                    if dy >= 1.0 {
-                        this.do_scroll_discrete(Scroll::Down);
-                    } else if dy <= -1.0 {
-                        this.do_scroll_discrete(Scroll::Up);
-                    }
-                    if dx >= 1.0 {
-                        this.do_scroll_discrete(Scroll::Right);
-                    } else if dx <= -1.0 {
-                        this.do_scroll_discrete(Scroll::Left);
-                    }
-                    glib::signal::Inhibit(false)
-                }),
-            );
-            self.obj().add_controller(ec);
         }
 
         fn measure(&self, orientation: gtk::Orientation, _for_size: i32) -> (i32, i32, i32, i32) {
