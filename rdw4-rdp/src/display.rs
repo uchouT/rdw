@@ -494,6 +494,7 @@ mod imp {
             let notifier = self.notifier.clone();
             let mut context = self.context.clone();
             let thread = thread::spawn(move || {
+                let _ = context.lock().unwrap().instance.disconnect();
                 let res = do_connect(&mut context);
                 let connected = res.is_ok();
                 conn_tx.send(res).unwrap();
