@@ -127,15 +127,15 @@ pub mod imp {
         pub(crate) dmabuf: RefCell<Option<RdwDmabufScanout>>,
 
         #[cfg(unix)]
-        pub(crate) wl_queue: OnceCell<wayland_client::QueueHandle<crate::Display>>,
+        pub(crate) wl_queue: RefCell<Option<wayland_client::QueueHandle<crate::Display>>>,
         #[cfg(unix)]
         pub(crate) wl_source: Cell<Option<glib::SourceId>>,
         #[cfg(unix)]
-        pub(crate) wl_rel_manager: OnceCell<ZwpRelativePointerManagerV1>,
+        pub(crate) wl_rel_manager: RefCell<Option<ZwpRelativePointerManagerV1>>,
         #[cfg(unix)]
         pub(crate) wl_rel_pointer: RefCell<Option<ZwpRelativePointerV1>>,
         #[cfg(unix)]
-        pub(crate) wl_pointer_constraints: OnceCell<ZwpPointerConstraintsV1>,
+        pub(crate) wl_pointer_constraints: RefCell<Option<ZwpPointerConstraintsV1>>,
         #[cfg(unix)]
         pub(crate) wl_lock_pointer: RefCell<Option<ZwpLockedPointerV1>>,
 
@@ -481,6 +481,30 @@ pub mod imp {
             }
         }
 
+        fn unrealize(&self) {
+            #[cfg(unix)]
+            if self
+                .obj()
+                .display()
+                .downcast::<gdk_wl::WaylandDisplay>()
+                .is_ok()
+            {
+                self.unrealize_wl();
+            }
+
+            #[cfg(windows)]
+            if self
+                .obj()
+                .display()
+                .downcast::<gdk_win32::Win32Display>()
+                .is_ok()
+            {
+                self.unrealize_win32();
+            }
+
+            self.parent_unrealize();
+        }
+
         fn measure(&self, orientation: gtk::Orientation, _for_size: i32) -> (i32, i32, i32, i32) {
             let (mut minimum, mut natural, minimum_baseline, natural_baseline) = (128, 128, -1, -1);
 
@@ -705,6 +729,14 @@ pub mod imp {
         }
 
         #[cfg(unix)]
+        fn unrealize_wl(&self) {
+            self.wl_rel_manager.take();
+            self.wl_pointer_constraints.take();
+            self.wl_queue.take();
+            self.wl_source.set(None);
+        }
+
+        #[cfg(unix)]
         fn realize_wl(&self, dpy: &gdk_wl::WaylandDisplay) {
             use std::os::unix::io::AsRawFd;
             use wayland_client::{backend::Backend, globals::registry_queue_init, Connection};
@@ -717,11 +749,10 @@ pub mod imp {
             let (globals, mut queue) = registry_queue_init::<crate::Display>(&connection).unwrap();
 
             let rel_manager = globals.bind(&queue.handle(), 1..=1, ()).unwrap();
-            self.wl_rel_manager.set(rel_manager).unwrap();
+            self.wl_rel_manager.replace(Some(rel_manager));
             let pointer_constraints = globals.bind(&queue.handle(), 1..=1, ()).unwrap();
             self.wl_pointer_constraints
-                .set(pointer_constraints)
-                .unwrap();
+                .replace(Some(pointer_constraints));
 
             let fd = connection
                 .prepare_read()
@@ -733,7 +764,7 @@ pub mod imp {
                 glib::Continue(true)
             });
 
-            self.wl_queue.set(queue.handle()).unwrap();
+            self.wl_queue.replace(Some(queue.handle()));
             glib::MainContext::default().spawn_local(
                 clone!(@weak self as this => @default-panic, async move {
                     let mut obj = this.obj().clone();
@@ -742,6 +773,9 @@ pub mod imp {
             );
             self.wl_source.set(Some(source))
         }
+
+        #[cfg(windows)]
+        fn unrealize_win32(&self) {}
 
         #[cfg(windows)]
         fn realize_win32(&self, dpy: &gdk_win32::Win32Display) {
@@ -1077,10 +1111,11 @@ pub mod imp {
                 _ => return false,
             };
             let pointer = device.wl_pointer().unwrap();
-            let handle = self.wl_queue.get().unwrap();
+            let queue = self.wl_queue.borrow();
+            let handle = queue.as_ref().unwrap();
 
             if self.wl_lock_pointer.borrow().is_none() {
-                if let Some(constraints) = self.wl_pointer_constraints.get() {
+                if let Some(constraints) = &*self.wl_pointer_constraints.borrow() {
                     if let Some(surf) = self.wl_surface() {
                         let lock = constraints.lock_pointer(
                             &surf,
@@ -1096,8 +1131,7 @@ pub mod imp {
             }
 
             if self.wl_rel_pointer.borrow().is_none() {
-                let handle = self.wl_queue.get().unwrap();
-                if let Some(rel_manager) = self.wl_rel_manager.get() {
+                if let Some(rel_manager) = &*self.wl_rel_manager.borrow() {
                     let rel_pointer = rel_manager.get_relative_pointer(&pointer, handle, ());
                     self.wl_rel_pointer.replace(Some(rel_pointer));
                 }
