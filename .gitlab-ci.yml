@@ -45,8 +45,7 @@ test-build:
   stage: test
   script:
     - pushd rdw4
-    - gtk4-broadwayd :0 &
-    - GDK_BACKEND=broadway BROADWAY_DISPLAY=:0 make
+    - make
     - sudo make install
     - popd
     - cargo build
