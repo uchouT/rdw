@@ -61,5 +61,5 @@ $(VAPI): $(GIR)
 	echo rdw4 > $(@D)/rdw4-rdp.deps
 	echo freerdp2 >> $(@D)/rdw4-rdp.deps
 
-install: $(HEADER)
+install: all
 	cp -r inst/* $(DESTDIR)/

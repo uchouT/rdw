@@ -56,5 +56,5 @@ $(VAPI): $(GIR)
 	echo rdw4 > $(@D)/rdw4-spice.deps
 	echo spice-client-glib-2.0 >> $(@D)/rdw4-spice.deps
 
-install: $(HEADER)
+install: all
 	cp -r inst/* $(DESTDIR)/

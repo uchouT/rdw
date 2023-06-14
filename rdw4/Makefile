@@ -52,5 +52,5 @@ $(VAPI): $(GIR)
 		$< -d $(@D)
 	echo gtk4 > $(@D)/rdw4.deps
 
-install: $(HEADER)
+install: all
 	cp -r inst/* $(DESTDIR)/

@@ -56,5 +56,5 @@ $(VAPI): $(GIR)
 	echo rdw4 > $(@D)/rdw4-vnc.deps
 	echo gvnc-1.0 >> $(@D)/rdw4-vnc.deps
 
-install: $(HEADER)
+install: all
 	cp -r inst/* $(DESTDIR)/
