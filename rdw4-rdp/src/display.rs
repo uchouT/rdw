@@ -365,6 +365,9 @@ mod imp {
                     self.obj().define_cursor(None);
                 }
                 RdpEvent::ClipboardData { data } => {
+                    if self.obj().read_only() {
+                        return;
+                    }
                     if let Some((format, mut tx)) = self.clipboard.tx.take() {
                         let data = match format {
                             Format::UnicodeText => match string_from_utf16(data) {
@@ -382,6 +385,9 @@ mod imp {
                     }
                 }
                 RdpEvent::ClipboardSetContent { formats } => {
+                    if self.obj().read_only() {
+                        return;
+                    }
                     let cb = gdk::traits::DisplayExt::clipboard(&self.obj().display());
                     let content = rdw::ContentProvider::new(
                         &formats,
@@ -414,6 +420,9 @@ mod imp {
                     }
                 }
                 RdpEvent::ClipboardDataRequest { format } => {
+                    if self.obj().read_only() {
+                        return;
+                    }
                     glib::MainContext::default().spawn_local(glib::clone!(@weak self as this => async move {
                         let mut data = None;
 
@@ -551,6 +560,15 @@ mod imp {
         }
 
         async fn send_event(&self, event: Event) -> Result<()> {
+            match event {
+                Event::Disconnect(_) => {}
+                _ => {
+                    if self.obj().read_only() {
+                        return Ok(());
+                    }
+                }
+            }
+
             match &*self.tx.borrow() {
                 Some(tx) => {
                     tx.send(event)
