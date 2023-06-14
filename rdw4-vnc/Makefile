@@ -35,8 +35,12 @@ $(GIR): $(HEADER)
 	g-ir-scanner -v --warn-all \
 		--namespace RdwVnc --nsversion=4.0 \
 		--identifier-prefix RdwVnc \
-		-Iinst/include --c-include "rdw-vnc.h" \
-		--library=rdw4-vnc --library-path=inst/$(PREFIX)/$(LIB) \
+		--c-include "rdw-vnc.h" \
+		-I$(PREFIX)/include \
+		-Iinst/$(PREFIX)/include \
+		-L$(PREFIX)/$(LIB) \
+		-Linst/$(PREFIX)/$(LIB) \
+		--library=rdw4-vnc \
 		--include=GVnc-1.0 --pkg gvnc-1.0 \
 		--include=Rdw-4.0 --pkg rdw4 \
 		--output $@ \

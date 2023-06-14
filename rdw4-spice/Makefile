@@ -35,8 +35,12 @@ $(GIR): $(HEADER)
 	g-ir-scanner -v --warn-all \
 		--namespace RdwSpice --nsversion=4.0 \
 		--identifier-prefix RdwSpice \
-		-Iinst/include --c-include "rdw-spice.h" \
-		--library=rdw4-spice --library-path=inst/$(PREFIX)/$(LIB) \
+		--c-include "rdw-spice.h" \
+		-I$(PREFIX)/include \
+		-Iinst/$(PREFIX)/include \
+		-L$(PREFIX)/$(LIB) \
+		-Linst/$(PREFIX)/$(LIB) \
+		--library=rdw4-spice \
 		--include=SpiceClientGLib-2.0 --pkg spice-client-glib-2.0 \
 		--include=Rdw-4.0 --pkg rdw4 \
 		--output $@ \

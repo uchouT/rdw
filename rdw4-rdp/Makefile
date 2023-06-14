@@ -35,8 +35,12 @@ $(GIR): $(HEADER)
 	g-ir-scanner -v --warn-all \
 		--namespace RdwRdp --nsversion=4.0 \
 		--identifier-prefix RdwRdp \
-		-Iinst/include --c-include "rdw-rdp.h" \
-		--library=rdw4-rdp --library-path=inst/$(PREFIX)/$(LIB) \
+		--c-include "rdw-rdp.h" \
+		-I$(PREFIX)/include \
+		-Iinst/$(PREFIX)/include \
+		-L$(PREFIX)/$(LIB) \
+		-Linst/$(PREFIX)/$(LIB) \
+		--library=rdw4-rdp \
 		--include-uninstalled=freerdp2-1.0.gir \
 		--include=Rdw-4.0 --pkg rdw4 \
 		--pkg freerdp2 \

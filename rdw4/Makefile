@@ -34,8 +34,12 @@ $(GIR): $(HEADER)
 	g-ir-scanner -v --warn-all \
 		--namespace Rdw --nsversion=4.0 \
 		--identifier-prefix Rdw \
-		-Iinst/include --c-include "rdw.h" \
-		--library=rdw4 --library-path=inst/$(PREFIX)/$(LIB) \
+		--c-include "rdw.h" \
+		-I$(PREFIX)/include \
+		-Iinst/$(PREFIX)/include \
+		-L$(PREFIX)/$(LIB) \
+		-Linst/$(PREFIX)/$(LIB) \
+		--library=rdw4 \
 		--include=Gtk-4.0 --pkg gtk4 \
 		--output $@ \
 		$<
