@@ -114,7 +114,7 @@ mod imp {
 
     impl Default for Display {
         fn default() -> Self {
-            fn new_context() -> (Box<Context<RdpContextHandler>>, UnboundedReceiver<RdpEvent>){
+            fn new_context() -> (Box<Context<RdpContextHandler>>, UnboundedReceiver<RdpEvent>) {
                 let (tx, rx) = futures::channel::mpsc::unbounded();
                 let mut context = Context::new(RdpContextHandler::new(tx));
                 context.settings.set_support_display_control(true);
@@ -449,7 +449,7 @@ mod imp {
                         let _ = this.send_event(Event::ClipboardData(data)).await;
                     }));
                 }
-                RdpEvent::Eol => { self.set_connected(false) },
+                RdpEvent::Eol => self.set_connected(false),
             }
         }
 
@@ -517,10 +517,7 @@ mod imp {
 
             conn_rx.await.unwrap()?;
             self.tx.replace(Some(tx));
-            let mut rdp_event_rx = self
-                .rx
-                .take()
-                .unwrap();
+            let mut rdp_event_rx = self.rx.take().unwrap();
 
             // the "dispatch loop"
             MainContext::default().spawn_local(clone!(@weak self as this => async move {

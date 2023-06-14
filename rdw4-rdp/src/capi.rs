@@ -49,7 +49,10 @@ pub unsafe extern "C" fn rdw_rdp_display_connect_async(
         let res = this
             .rdp_connect()
             .await
-            .map_err(|_| glib::Error::new(Error::Failed, "Connect failed"))
+            .map_err(|e| {
+                let msg = format!("RDP connect failed: {e}");
+                glib::Error::new(Error::Failed, &msg)
+            })
             .map(|_| true);
         task.return_result(res);
     });

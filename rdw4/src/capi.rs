@@ -31,7 +31,6 @@ pub extern "C" fn rdw_init(_error: *mut *mut glib::ffi::GError) -> bool {
     true
 }
 
-
 /// rdw_shot_widget:
 /// @widget: A #GtkWidget
 ///
