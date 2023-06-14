@@ -22,6 +22,15 @@ pub extern "C" fn rdw_display_get_type() -> glib::ffi::GType {
     <crate::Display as glib::types::StaticType>::static_type().into_glib()
 }
 
+/// rdw_init:
+/// Initializes the library (for debugging)
+#[no_mangle]
+pub extern "C" fn rdw_init(_error: *mut *mut glib::ffi::GError) -> bool {
+    env_logger::init();
+    true
+}
+
+
 /// rdw_shot_widget:
 /// @widget: A #GtkWidget
 ///
