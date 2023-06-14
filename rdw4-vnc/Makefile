@@ -2,9 +2,9 @@ CARGO_FLAGS ?= --release
 
 MACHINE := $(shell getconf LONG_BIT)
 ifeq ($(MACHINE), 64)
-LIB = lib64
+LIB ?= lib64
 else
-LIB = lib
+LIB ?= lib
 endif
 
 ifdef MINGW_PREFIX
