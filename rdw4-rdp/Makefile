@@ -57,6 +57,7 @@ $(VAPI): $(GIR)
 	mkdir -p $(@D)
 	vapigen \
 		--girdir . \
+		--vapidir . \
 		--metadatadir . \
 		--pkg rdw4 \
 		--pkg freerdp2 \
