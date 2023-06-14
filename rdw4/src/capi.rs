@@ -27,6 +27,7 @@ pub extern "C" fn rdw_display_get_type() -> glib::ffi::GType {
 #[no_mangle]
 pub extern "C" fn rdw_init(_error: *mut *mut glib::ffi::GError) -> bool {
     env_logger::init();
+    log::trace!("rdw_init");
     true
 }
 

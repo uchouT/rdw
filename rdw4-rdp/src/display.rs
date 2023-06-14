@@ -460,6 +460,8 @@ mod imp {
         }
 
         pub(crate) async fn connect(&self) -> Result<()> {
+            log::trace!("RdwRdpDisplay::connect");
+
             fn do_connect(context: &mut Arc<Mutex<Box<Context<RdpContextHandler>>>>) -> Result<()> {
                 let mut ctxt = context.lock().unwrap();
                 loop {
@@ -477,6 +479,7 @@ mod imp {
                             _ => {}
                         }
                     }
+                    log::trace!("RdwRdpDisplay::connect res={:?}", res);
                     break res;
                 }
             }
@@ -494,15 +497,12 @@ mod imp {
                 res
             }
 
-            let mut rdp_event_rx = self
-                .rx
-                .take()
-                .ok_or_else(|| RdpError::Failed("already started".into()))?;
-
             let (conn_tx, conn_rx) = oneshot::channel();
+            if self.tx.borrow().is_some() {
+                return Err(RdpError::Failed("already started".into()));
+            }
 
             let (tx, rx) = mpsc::channel();
-            self.tx.replace(Some(tx));
             let notifier = self.notifier.clone();
             let mut context = self.context.clone();
             let thread = thread::spawn(move || {
@@ -514,6 +514,13 @@ mod imp {
                     let _res = do_loop(&mut context, rx, notifier);
                 }
             });
+
+            conn_rx.await.unwrap()?;
+            self.tx.replace(Some(tx));
+            let mut rdp_event_rx = self
+                .rx
+                .take()
+                .unwrap();
 
             // the "dispatch loop"
             MainContext::default().spawn_local(clone!(@weak self as this => async move {
@@ -532,7 +539,7 @@ mod imp {
                 }
             }));
 
-            conn_rx.await.unwrap()
+            Ok(())
         }
 
         pub(crate) async fn disconnect(&self) -> Result<()> {
