@@ -18,7 +18,6 @@ pub extern "C" fn rdw_error_quark() -> glib::ffi::GQuark {
 
 #[no_mangle]
 pub extern "C" fn rdw_display_get_type() -> glib::ffi::GType {
-    gtk::init().unwrap();
     <crate::Display as glib::types::StaticType>::static_type().into_glib()
 }
 
