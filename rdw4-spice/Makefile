@@ -1,3 +1,5 @@
+CARGO_FLAGS ?= --release
+
 MACHINE := $(shell getconf LONG_BIT)
 ifeq ($(MACHINE), 64)
 LIB = lib64
@@ -26,7 +28,7 @@ export GI_TYPELIB_PATH+=:$(PWD)/inst/$(PREFIX)/$(LIB)/girepository-1.0
 export LD_LIBRARY_PATH=$(PWD)/inst/$(PREFIX)/$(LIB)
 
 $(HEADER): $(RUST_SOURCES)
-	cargo cinstall --release --destdir=inst --prefix=$(PREFIX) --libdir=$(PREFIX)/$(LIB)
+	cargo cinstall $(CARGO_FLAGS) --destdir=inst --prefix=$(PREFIX) --libdir=$(PREFIX)/$(LIB)
 
 $(GIR): $(HEADER)
 	mkdir -p $(@D)

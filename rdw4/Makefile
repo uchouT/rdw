@@ -1,3 +1,5 @@
+CARGO_FLAGS ?= --release
+
 MACHINE := $(shell getconf LONG_BIT)
 ifeq ($(MACHINE), 64)
 LIB = lib64
@@ -25,7 +27,7 @@ RUST_SOURCES = $(shell find src)
 all: $(GIR) $(TYPELIB) $(VAPI)
 
 $(HEADER): $(RUST_SOURCES)
-	cargo cinstall --release --destdir=inst --prefix=$(PREFIX) --libdir=$(PREFIX)/$(LIB)
+	cargo cinstall $(CARGO_FLAGS) --destdir=inst --prefix=$(PREFIX) --libdir=$(PREFIX)/$(LIB)
 
 $(GIR): $(HEADER)
 	mkdir -p $(@D)
