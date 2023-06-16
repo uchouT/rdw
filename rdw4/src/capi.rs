@@ -217,18 +217,15 @@ pub extern "C" fn rdw_display_set_d3d11_texture2d_can_acquire(
 
 #[no_mangle]
 pub extern "C" fn rdw_content_provider_get_type() -> glib::ffi::GType {
-    gtk::init().unwrap();
     <crate::ContentProvider as glib::types::StaticType>::static_type().into_glib()
 }
 
 #[no_mangle]
 pub extern "C" fn rdw_usb_redir_get_type() -> glib::ffi::GType {
-    gtk::init().unwrap();
     <crate::UsbRedir as glib::types::StaticType>::static_type().into_glib()
 }
 
 #[no_mangle]
 pub extern "C" fn rdw_usb_device_get_type() -> glib::ffi::GType {
-    gtk::init().unwrap();
     <crate::UsbDevice as glib::types::StaticType>::static_type().into_glib()
 }
