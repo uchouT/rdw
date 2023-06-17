@@ -521,6 +521,8 @@ pub mod imp {
                 }
             }
 
+            natural /= self.obj().scale_factor();
+
             if !self.scaling() {
                 minimum = natural;
             }
@@ -602,7 +604,10 @@ pub mod imp {
             if scaling {
                 self.obj().set_size_request(-1, -1);
             } else if let Some((width, height)) = self.obj().display_size() {
-                self.obj().set_size_request(width as _, height as _);
+                self.obj().set_size_request(
+                    width as i32 / self.obj().scale_factor(),
+                    height as i32 / self.obj().scale_factor(),
+                );
             }
             self.scaling.set(scaling);
             self.obj().notify("scaling");
