@@ -393,7 +393,7 @@ pub mod imp {
                     let absolute = value.get().unwrap();
                     if absolute {
                         self.ungrab_mouse();
-                        self.gl_area().set_cursor(self.cursor.borrow().as_ref());
+                        self.update_cursor();
                     }
 
                     self.mouse_absolute.set(absolute);
@@ -419,7 +419,7 @@ pub mod imp {
                 "grab-shortcut" => self.grab_shortcut.get().to_value(),
                 "grabbed" => self.grabbed.get().to_value(),
                 "synthesize-delay" => self.synthesize_delay.get().to_value(),
-                "mouse-absolute" => self.mouse_absolute.get().to_value(),
+                "mouse-absolute" => self.mouse_absolute().to_value(),
                 "read-only" => self.read_only().to_value(),
                 "show-local-cursor" => self.show_local_cursor().to_value(),
                 "scaling" => self.scaling().to_value(),
@@ -618,17 +618,26 @@ pub mod imp {
             self.scaling.get()
         }
 
+        pub(crate) fn update_cursor(&self) {
+            if self.read_only() || self.show_local_cursor() {
+                self.gl_area().set_cursor(None);
+            } else {
+                if self.mouse_absolute() {
+                    self.gl_area().set_cursor(self.cursor.borrow().as_ref());
+                } else if self.grabbed.get().contains(Grab::MOUSE) {
+                    self.gl_area().set_cursor_from_name(Some("none"));
+                } else {
+                    self.gl_area().set_cursor(None);
+                }
+            }
+        }
+
         fn set_show_local_cursor(&self, show: bool) {
             if show == self.show_local_cursor() {
                 return;
             }
             self.show_local_cursor.set(show);
-            if show {
-                self.gl_area().set_cursor(None);
-            } else {
-                self.try_hide_cursor();
-                self.obj().define_cursor(self.cursor.take())
-            }
+            self.update_cursor();
             self.obj().notify("show-local-cursor");
         }
 
@@ -644,11 +653,16 @@ pub mod imp {
                 self.ungrab();
             }
             self.read_only.set(ro);
+            self.update_cursor();
             self.obj().notify("read-only");
         }
 
         fn read_only(&self) -> bool {
             self.read_only.get()
+        }
+
+        fn mouse_absolute(&self) -> bool {
+            self.mouse_absolute.get()
         }
 
         fn do_motion(&self, x: f64, y: f64) {
@@ -1249,13 +1263,6 @@ pub mod imp {
             }
         }
 
-        fn try_hide_cursor(&self) {
-            if self.show_local_cursor() {
-                return;
-            }
-            self.gl_area().set_cursor_from_name(Some("none"));
-        }
-
         fn try_grab(&self) -> Grab {
             let mut grabbed = Default::default();
             if self.try_grab_keyboard() {
@@ -1263,9 +1270,7 @@ pub mod imp {
             }
             if self.try_grab_mouse() {
                 grabbed |= Grab::MOUSE;
-                if !self.obj().mouse_absolute() {
-                    self.try_hide_cursor();
-                }
+                self.update_cursor();
                 self.obj().queue_draw(); // update cursor
             }
             self.grabbed.set(self.obj().grabbed() | grabbed);
@@ -1833,10 +1838,8 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
         #[cfg(not(feature = "bindings"))]
         {
             let imp = self_.imp();
-            if self.mouse_absolute() {
-                imp.gl_area().set_cursor(cursor.as_ref());
-            }
             imp.cursor.replace(cursor);
+            imp.update_cursor();
         }
     }
 
