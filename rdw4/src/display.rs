@@ -630,6 +630,7 @@ pub mod imp {
                     self.gl_area().set_cursor(None);
                 }
             }
+            self.obj().queue_draw();
         }
 
         fn set_show_local_cursor(&self, show: bool) {
@@ -1270,11 +1271,12 @@ pub mod imp {
             }
             if self.try_grab_mouse() {
                 grabbed |= Grab::MOUSE;
-                self.update_cursor();
-                self.obj().queue_draw(); // update cursor
             }
             self.grabbed.set(self.obj().grabbed() | grabbed);
             self.obj().notify("grabbed");
+            if grabbed.contains(Grab::MOUSE) {
+                self.update_cursor();
+            }
             grabbed
         }
 
