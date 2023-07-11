@@ -464,24 +464,21 @@ mod imp {
 
             fn do_connect(context: &mut Arc<Mutex<Box<Context<RdpContextHandler>>>>) -> Result<()> {
                 let mut ctxt = context.lock().unwrap();
-                loop {
-                    let res = ctxt.instance.connect();
-                    if let Some(err) = ctxt.last_error() {
-                        log::warn!("connect error: {:?}", err);
-                        match err {
-                            RdpErr::RdpErrConnect(RdpErrConnect::AuthenticationFailed)
+                let res = ctxt.instance.connect();
+                if let Some(err) = ctxt.last_error() {
+                    log::warn!("connect error: {:?}", err);
+                    match err {
+                        RdpErr::RdpErrConnect(RdpErrConnect::AuthenticationFailed)
                             | RdpErr::RdpErrConnect(RdpErrConnect::LogonFailure) => {
                                 // this should trigger RdpEvent::Authenticate on next connect()
                                 ctxt.settings.set_username(None).unwrap();
                                 ctxt.settings.set_password(None).unwrap();
-                                continue;
                             }
-                            _ => {}
-                        }
+                        _ => {}
                     }
-                    log::trace!("RdwRdpDisplay::connect res={:?}", res);
-                    break res;
-                }
+                };
+                log::trace!("RdwRdpDisplay::connect res={:?}", res);
+                res
             }
 
             fn do_loop(
@@ -498,26 +495,25 @@ mod imp {
             }
 
             let (conn_tx, conn_rx) = oneshot::channel();
-            if self.tx.borrow().is_some() {
+            let Some(mut rdp_event_rx) = self.rx.take() else {
                 return Err(RdpError::Failed("already started".into()));
-            }
+            };
 
             let (tx, rx) = mpsc::channel();
+            self.tx.replace(Some(tx));
+
             let notifier = self.notifier.clone();
             let mut context = self.context.clone();
             let thread = thread::spawn(move || {
-                let _ = context.lock().unwrap().instance.disconnect();
                 let res = do_connect(&mut context);
                 let connected = res.is_ok();
                 conn_tx.send(res).unwrap();
                 if connected {
                     let _res = do_loop(&mut context, rx, notifier);
+                } else {
+                    context.lock().unwrap().handler.send_eol().unwrap();
                 }
             });
-
-            conn_rx.await.unwrap()?;
-            self.tx.replace(Some(tx));
-            let mut rdp_event_rx = self.rx.take().unwrap();
 
             // the "dispatch loop"
             MainContext::default().spawn_local(clone!(@weak self as this => async move {
@@ -536,7 +532,7 @@ mod imp {
                 }
             }));
 
-            Ok(())
+            conn_rx.await.unwrap()
         }
 
         pub(crate) async fn disconnect(&self) -> Result<()> {
@@ -660,7 +656,9 @@ mod imp {
                 let e = rx
                     .recv()
                     .map_err(|e| RdpError::Failed(format!("recv(): {}", e)))?;
-                dispatch_client_event(context, e)?;
+                if !dispatch_client_event(context, e)? {
+                    break;
+                }
                 notifier.read_sync()?;
             }
 
@@ -683,12 +681,13 @@ mod imp {
     fn dispatch_client_event(
         context: &mut Arc<Mutex<Box<Context<RdpContextHandler>>>>,
         e: Event,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         let mut ctxt = context.lock().unwrap();
         match e {
             Event::Disconnect(tx) => {
                 let res = ctxt.instance.disconnect();
                 let _ = tx.send(res);
+                return Ok(false);
             }
             Event::Keyboard(flags, code) => {
                 if let Some(mut input) = ctxt.input() {
@@ -726,7 +725,7 @@ mod imp {
                 }
             }
         }
-        Ok(())
+        Ok(true)
     }
 }
 
