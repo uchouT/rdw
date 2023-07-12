@@ -1,7 +1,10 @@
 use gtk::{gdk, prelude::*};
 
 fn get_display() -> Option<gdk::Display> {
-    let Some(window) = gtk::Window::toplevels().item(0).and_then(|w| w.downcast::<gtk::Widget>().ok()) else {
+    let Some(window) = gtk::Window::toplevels()
+        .item(0)
+        .and_then(|w| w.downcast::<gtk::Widget>().ok())
+    else {
         log::warn!("No top-level window? no keymap...");
         return None;
     };

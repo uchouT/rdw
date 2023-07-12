@@ -469,11 +469,11 @@ mod imp {
                     log::warn!("connect error: {:?}", err);
                     match err {
                         RdpErr::RdpErrConnect(RdpErrConnect::AuthenticationFailed)
-                            | RdpErr::RdpErrConnect(RdpErrConnect::LogonFailure) => {
-                                // this should trigger RdpEvent::Authenticate on next connect()
-                                ctxt.settings.set_username(None).unwrap();
-                                ctxt.settings.set_password(None).unwrap();
-                            }
+                        | RdpErr::RdpErrConnect(RdpErrConnect::LogonFailure) => {
+                            // this should trigger RdpEvent::Authenticate on next connect()
+                            ctxt.settings.set_username(None).unwrap();
+                            ctxt.settings.set_password(None).unwrap();
+                        }
                         _ => {}
                     }
                 };
