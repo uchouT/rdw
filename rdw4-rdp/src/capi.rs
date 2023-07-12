@@ -20,6 +20,11 @@ pub extern "C" fn rdw_rdp_display_get_type() -> glib::ffi::GType {
     <Display as glib::types::StaticType>::static_type().into_glib()
 }
 
+#[no_mangle]
+pub extern "C" fn rdw_rdp_display_new() -> *mut RdwRdpDisplay {
+    Display::new().to_glib_full()
+}
+
 /// rdw_rdp_display_connect_async:
 /// @dpy: A #RdwDisplay
 /// @cancellable: (nullable): optional #GCancellable object, %NULL to ignore

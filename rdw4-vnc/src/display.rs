@@ -5,7 +5,7 @@ use rdw::gtk;
 
 use rdw::DisplayExt;
 
-mod imp {
+pub(crate) mod imp {
     use super::*;
     use crate::framebuffer::*;
     use gtk::subclass::prelude::*;
