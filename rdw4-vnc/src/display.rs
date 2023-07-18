@@ -419,7 +419,7 @@ pub(crate) mod imp {
                     .any(|f| f.name() == fmt)
             };
 
-            if pixbuf_supports("jpeg") {
+            if pixbuf_supports(Some("jpeg".into())) {
                 if !self.allow_lossy {
                     enc.retain(|&x| x != TightJpeg5);
                 }

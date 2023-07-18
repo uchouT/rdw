@@ -208,13 +208,12 @@ pub mod imp {
             gl_area.set_has_depth_buffer(false);
             gl_area.set_has_stencil_buffer(false);
             gl_area.set_auto_render(false);
-            gl_area.set_use_es(true);
             //gl_area.set_allowed_apis(gdk::GLAPI::GLES);
             gl_area.set_required_version(3, 1);
             gl_area.connect_render(
-                clone!(@weak self as this => @default-return glib::signal::Inhibit(true), move |_, _| {
+                clone!(@weak self as this => @default-return glib::ControlFlow::Break, move |_, _| {
                     this.obj().render();
-                    glib::signal::Inhibit(true)
+                    glib::ControlFlow::Break
                 }),
             );
             gl_area.connect_realize(clone!(@weak self as this => move |_| {
@@ -244,7 +243,7 @@ pub mod imp {
             ec.connect_key_pressed(
                 clone!(@weak self as this => @default-panic, move |ec, keyval, keycode, _state| {
                     this.key_pressed(ec, keyval, keycode);
-                    glib::signal::Inhibit(true)
+                    glib::ControlFlow::Break
                 }),
             );
             ec.connect_key_released(
@@ -312,7 +311,7 @@ pub mod imp {
                     } else if dx <= -1.0 {
                         this.do_scroll_discrete(Scroll::Left);
                     }
-                    glib::signal::Inhibit(false)
+                    glib::ControlFlow::Continue
                 }),
             );
             self.obj().add_controller(ec);
@@ -542,7 +541,7 @@ pub mod imp {
             }
             self.resize_timeout_id.set(Some(glib::timeout_add_local(
                 Duration::from_millis(500),
-                clone!(@weak self as this => @default-return glib::Continue(false), move || {
+                clone!(@weak self as this => @default-return glib::ControlFlow::Break, move || {
                     let sf = this.obj().scale_factor() as u32;
                     let width = width as u32 * sf;
                     let height = height as u32 * sf;
@@ -555,7 +554,7 @@ pub mod imp {
                                    }).unwrap_or((0u32, 0u32));
                     this.do_resize_request(width, height, w_mm, h_mm);
                     this.resize_timeout_id.set(None);
-                    glib::Continue(false)
+                    glib::ControlFlow::Break
                 }),
             )));
         }
@@ -781,7 +780,7 @@ pub mod imp {
                 .as_raw_fd();
             let source = glib::source::unix_fd_add_local(fd, glib::IOCondition::IN, move |_, _| {
                 connection.prepare_read().unwrap().read().unwrap();
-                glib::Continue(true)
+                glib::ControlFlow::Continue
             });
 
             self.wl_queue.replace(Some(queue.handle()));
@@ -1054,9 +1053,9 @@ pub mod imp {
             self.last_key_press_timeout
                 .set(Some(glib::timeout_add_local(
                     Duration::from_millis(self.synthesize_delay.get() as _),
-                    glib::clone!(@weak self as this => @default-return glib::Continue(false), move || {
+                    glib::clone!(@weak self as this => @default-return glib::ControlFlow::Break, move || {
                         this.emit_last_key_press();
-                        glib::Continue(false)
+                        glib::ControlFlow::Break
                     }),
                 )));
         }
@@ -1097,7 +1096,7 @@ pub mod imp {
             ec.set_propagation_phase(gtk::PropagationPhase::Capture);
             ec.connect_key_pressed(clone!(@weak self as this, @weak toplevel => @default-panic, move |ec, keyval, keycode, _state| {
                 this.key_pressed(ec, keyval, keycode);
-                glib::signal::Inhibit(true)
+                glib::ControlFlow::Break
             }));
             ec.connect_key_released(
                 clone!(@weak self as this => @default-panic, move |_ec, keyval, keycode, _state| {
@@ -1814,11 +1813,11 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
                     gl::TexImage2D(
                         gl::TEXTURE_2D,
                         0,
-                        gl::BGRA as _,
+                        gl::RGBA as _,
                         width as _,
                         height as _,
                         0,
-                        gl::BGRA,
+                        gl::RGBA,
                         gl::UNSIGNED_BYTE,
                         std::ptr::null(),
                     );
