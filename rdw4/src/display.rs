@@ -23,9 +23,6 @@ use crate::RdwD3d11Texture2dScanout;
 use crate::RdwDmabufScanout;
 use crate::{Grab, KeyEvent, Scroll};
 
-#[cfg(not(feature = "bindings"))]
-use crate::egl;
-
 #[repr(C)]
 pub struct RdwDisplayClass {
     pub parent_class: gtk::ffi::GtkWidgetClass,
@@ -47,10 +44,9 @@ impl std::fmt::Debug for RdwDisplay {
 #[cfg(not(feature = "bindings"))]
 pub mod imp {
     use super::*;
+    use crate::picture::Picture;
     #[cfg(windows)]
     use crate::win32;
-    use crate::{error::Error, util};
-    use gl::types::*;
     use glib::{clone, subclass::Signal, SourceId};
     use gtk::{graphene, subclass::prelude::*};
     use once_cell::sync::{Lazy, OnceCell};
@@ -92,8 +88,7 @@ pub mod imp {
 
     #[derive(Default)]
     pub struct Display {
-        pub(crate) gl_area: OnceCell<gtk::GLArea>,
-        pub(crate) layout_manager: OnceCell<gtk::BinLayout>,
+        pub(crate) picture: Picture,
 
         pub(crate) scaling: Cell<bool>,
         pub(crate) show_local_cursor: Cell<bool>,
@@ -119,10 +114,6 @@ pub mod imp {
         pub(crate) shortcuts_inhibited_id: Cell<Option<SignalHandlerId>>,
         pub(crate) grab_ec: glib::WeakRef<gtk::EventControllerKey>,
 
-        pub(crate) texture_id: Cell<GLuint>,
-        pub(crate) texture_blit_vao: Cell<GLuint>,
-        pub(crate) texture_blit_prog: Cell<GLuint>,
-        pub(crate) texture_blit_flip_prog: Cell<GLuint>,
         #[cfg(unix)]
         pub(crate) dmabuf: RefCell<Option<RdwDmabufScanout>>,
 
@@ -190,6 +181,7 @@ pub mod imp {
                         .unwrap_or(std::ptr::null())
                 });
                 gl::load_with(epoxy::get_proc_addr);
+                assert_eq!(unsafe { gl::GetError() }, gl::NO_ERROR);
             }
         }
     }
@@ -202,29 +194,7 @@ pub mod imp {
             self.obj().set_focusable(true);
             self.obj().set_focus_on_click(true);
 
-            self.layout_manager.set(gtk::BinLayout::new()).unwrap();
-
-            let gl_area = gtk::GLArea::new();
-            gl_area.set_has_depth_buffer(false);
-            gl_area.set_has_stencil_buffer(false);
-            gl_area.set_auto_render(false);
-            //gl_area.set_allowed_apis(gdk::GLAPI::GLES);
-            gl_area.set_required_version(3, 1);
-            gl_area.connect_render(
-                clone!(@weak self as this => @default-return glib::ControlFlow::Break, move |_, _| {
-                    this.obj().render();
-                    glib::ControlFlow::Break
-                }),
-            );
-            gl_area.connect_realize(clone!(@weak self as this => move |_| {
-                if let Err(e) = unsafe { this.realize_gl() } {
-                    log::warn!("Failed to realize gl: {}", e);
-                    let e = glib::Error::new(Error::GL, &e);
-                    this.gl_area().set_error(Some(&e));
-                }
-            }));
-
-            self.gl_area.set(gl_area).unwrap();
+            self.picture.set_parent(self.obj().as_ref());
 
             self.grab_shortcut.get_or_init(|| {
                 gtk::ShortcutTrigger::parse_string("<Ctrl>Alt_L|<Alt>Control_L").unwrap()
@@ -236,7 +206,7 @@ pub mod imp {
             }));
             self.obj().add_controller(ec);
 
-            self.gl_area().set_parent(&*self.obj());
+            // self.gl_area().set_parent(&*self.obj());
 
             let ec = gtk::EventControllerKey::new();
             ec.set_propagation_phase(gtk::PropagationPhase::Capture);
@@ -504,37 +474,16 @@ pub mod imp {
             self.parent_unrealize();
         }
 
-        fn measure(&self, orientation: gtk::Orientation, _for_size: i32) -> (i32, i32, i32, i32) {
-            let (mut minimum, mut natural, minimum_baseline, natural_baseline) = (128, 128, -1, -1);
+        fn request_mode(&self) -> gtk::SizeRequestMode {
+            gtk::SizeRequestMode::HeightForWidth
+        }
 
-            // TODO: doesn't work as expected yet
-            if let Some((w, h)) = self.display_size.get() {
-                match orientation {
-                    gtk::Orientation::Horizontal => {
-                        natural = w as _;
-                    }
-                    gtk::Orientation::Vertical => {
-                        natural = h as _;
-                    }
-                    _ => panic!(),
-                }
-            }
-
-            natural /= self.obj().scale_factor();
-
-            if !self.scaling() {
-                minimum = natural;
-            }
-
-            (minimum, natural, minimum_baseline, natural_baseline)
+        fn measure(&self, orientation: gtk::Orientation, for_size: i32) -> (i32, i32, i32, i32) {
+            self.picture.measure(orientation, for_size)
         }
 
         fn size_allocate(&self, width: i32, height: i32, baseline: i32) {
             self.parent_size_allocate(width, height, baseline);
-            self.layout_manager
-                .get()
-                .unwrap()
-                .allocate(&*self.obj(), width, height, baseline);
 
             if let Some(timeout_id) = self.resize_timeout_id.take() {
                 timeout_id.remove();
@@ -557,12 +506,14 @@ pub mod imp {
                     glib::ControlFlow::Break
                 }),
             )));
+
+            let (x, y, w, h) = self.paintable_area();
+            self.picture
+                .size_allocate(&gtk::Allocation::new(x, y, w, h), -1);
         }
 
         fn snapshot(&self, snapshot: &gtk::Snapshot) {
-            snapshot.save();
-            self.parent_snapshot(snapshot);
-            snapshot.restore();
+            self.obj().snapshot_child(&self.picture, snapshot);
 
             if self.obj().mouse_absolute() {
                 return;
@@ -596,6 +547,22 @@ pub mod imp {
     }
 
     impl Display {
+        fn paintable_area(&self) -> (i32, i32, i32, i32) {
+            let (width, height) = (self.obj().width() as f64, self.obj().height() as f64);
+            let display_ratio = width / height;
+            let ratio = self.picture.paintable().intrinsic_aspect_ratio();
+
+            let (w, h) = if ratio > display_ratio {
+                (width, width / ratio)
+            } else {
+                (height * ratio, height)
+            };
+
+            let x = (width - w.ceil()) / 2.0;
+            let y = (height - h.ceil()).floor() / 2.0;
+            (x as _, y as _, w as _, h as _)
+        }
+
         fn set_scaling(&self, scaling: bool) {
             if scaling == self.scaling() {
                 return;
@@ -619,14 +586,14 @@ pub mod imp {
 
         pub(crate) fn update_cursor(&self) {
             if self.read_only() || self.show_local_cursor() {
-                self.gl_area().set_cursor(None);
+                self.picture.set_cursor(None);
             } else {
                 if self.mouse_absolute() {
-                    self.gl_area().set_cursor(self.cursor.borrow().as_ref());
+                    self.picture.set_cursor(self.cursor.borrow().as_ref());
                 } else if self.grabbed.get().contains(Grab::MOUSE) {
-                    self.gl_area().set_cursor_from_name(Some("none"));
+                    self.picture.set_cursor_from_name(Some("none"));
                 } else {
-                    self.gl_area().set_cursor(None);
+                    self.picture.set_cursor(None);
                 }
             }
             self.obj().queue_draw();
@@ -741,12 +708,6 @@ pub mod imp {
                 .emit_by_name::<()>("resize-request", &[&width, &height, &w_mm, &h_mm]);
         }
 
-        pub(crate) fn make_current(&self) {
-            let area = self.gl_area();
-            area.make_current();
-            area.attach_buffers();
-        }
-
         #[cfg(unix)]
         fn unrealize_wl(&self) {
             self.wl_rel_manager.take();
@@ -855,10 +816,11 @@ pub mod imp {
             }));
 
             self.win_filter.set(Some(filter));
-        }
 
-        pub(crate) fn gl_area(&self) -> &gtk::GLArea {
-            self.gl_area.get().unwrap()
+            #[cfg(windows)]
+            if let Err(e) = self.realize_gl_win32() {
+                log::warn!("{}", e);
+            }
         }
 
         #[cfg(windows)]
@@ -895,64 +857,6 @@ pub mod imp {
             self.d3d11_device.set(d3d11_device.clone()).unwrap();
             std::mem::forget(d3d11_device);
 
-            Ok(())
-        }
-
-        unsafe fn realize_gl(&self) -> Result<(), String> {
-            use std::ffi::CString;
-            self.make_current();
-
-            let texture_blit_vs = CString::new(include_str!("texture-blit.vert")).unwrap();
-            let texture_blit_flip_vs =
-                CString::new(include_str!("texture-blit-flip.vert")).unwrap();
-            let texture_blit_fs = CString::new(include_str!("texture-blit.frag")).unwrap();
-
-            let texture_blit_prg =
-                util::compile_gl_prog(texture_blit_vs.as_c_str(), texture_blit_fs.as_c_str())?;
-            self.texture_blit_prog.set(texture_blit_prg);
-            let texture_blit_flip_prg =
-                util::compile_gl_prog(texture_blit_flip_vs.as_c_str(), texture_blit_fs.as_c_str())?;
-            self.texture_blit_flip_prog.set(texture_blit_flip_prg);
-
-            let mut vao = 0;
-            gl::GenVertexArrays(1, &mut vao);
-            gl::BindVertexArray(vao);
-            let mut vb = 0;
-            gl::GenBuffers(1, &mut vb);
-            gl::BindBuffer(gl::ARRAY_BUFFER, vb);
-            static POS: [f32; 8] = [-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0];
-            gl::BufferData(
-                gl::ARRAY_BUFFER,
-                std::mem::size_of::<[f32; 8]>() as _,
-                POS.as_ptr() as _,
-                gl::STATIC_DRAW,
-            );
-            let in_pos = gl::GetAttribLocation(
-                texture_blit_prg,
-                CString::new("in_position").unwrap().as_c_str().as_ptr(),
-            ) as u32;
-            gl::VertexAttribPointer(in_pos, 2, gl::FLOAT, gl::FALSE, 0, std::ptr::null());
-            gl::EnableVertexAttribArray(in_pos);
-            gl::BindBuffer(gl::ARRAY_BUFFER, 0);
-            gl::BindVertexArray(0);
-            self.texture_blit_vao.set(vao);
-
-            let tex_unit = gl::GetUniformLocation(
-                texture_blit_prg,
-                CString::new("tex_unit").unwrap().as_c_str().as_ptr(),
-            );
-            gl::ProgramUniform1i(texture_blit_prg, tex_unit, 0);
-
-            let mut tex_id = 0;
-            gl::GenTextures(1, &mut tex_id);
-            self.texture_id.set(tex_id);
-
-            #[cfg(windows)]
-            if let Err(e) = self.realize_gl_win32() {
-                log::warn!("{}", e);
-            }
-
-            self.obj().set_display_size(self.display_size.take());
             Ok(())
         }
 
@@ -997,7 +901,7 @@ pub mod imp {
 
                 self.grabbed.set(self.grabbed.get() - Grab::MOUSE);
                 if !self.obj().mouse_absolute() {
-                    self.gl_area().set_cursor(None);
+                    self.picture.set_cursor(None);
                 }
                 self.obj().queue_draw(); // update cursor
                 self.obj().notify("grabbed");
@@ -1279,26 +1183,6 @@ pub mod imp {
             grabbed
         }
 
-        pub(crate) fn texture_id(&self) -> GLuint {
-            self.texture_id.get()
-        }
-
-        pub(crate) fn texture_blit(&self, flip: bool) {
-            unsafe {
-                gl::UseProgram(if flip {
-                    self.texture_blit_flip_prog.get()
-                } else {
-                    self.texture_blit_prog.get()
-                });
-                gl::ActiveTexture(gl::TEXTURE0);
-                gl::BindTexture(gl::TEXTURE_2D, self.texture_id());
-                gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as _);
-                gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as _);
-                gl::BindVertexArray(self.texture_blit_vao.get());
-                gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
-            }
-        }
-
         fn borders(&self) -> (i32, i32) {
             let obj = self.obj();
             let (dw, dh) = match obj.display_size() {
@@ -1395,6 +1279,7 @@ pub mod imp {
                 .map(|w| w.wl_surface().unwrap())
         }
 
+        #[cfg(windows)]
         pub(crate) fn egl_display(&self) -> Option<egl::Display> {
             let widget = self.obj();
 
@@ -1468,7 +1353,6 @@ pub mod imp {
             let egl_image_target = egl::image_target_texture_2d_oes()
                 .ok_or("ImageTargetTexture2DOES support missing")?;
 
-            self.make_current();
             let egl_dpy = self
                 .egl_display()
                 .ok_or("Unsupported display kind (or not egl)")?;
@@ -1676,7 +1560,7 @@ pub trait DisplayExt: 'static {
 
     fn grabbed(&self) -> Grab;
 
-    fn update_area(&self, x: i32, y: i32, w: i32, h: i32, stride: i32, data: &[u8]);
+    fn update_area(&self, x: i32, y: i32, w: i32, h: i32, stride: i32, data: Option<&[u8]>);
 
     #[cfg(windows)]
     fn set_d3d11_texture2d_scanout(&self, s: Option<RdwD3d11Texture2dScanout>);
@@ -1686,8 +1570,6 @@ pub trait DisplayExt: 'static {
 
     #[cfg(unix)]
     fn set_dmabuf_scanout(&self, s: RdwDmabufScanout);
-
-    fn render(&self);
 
     fn set_alternative_text(&self, alt_text: &str);
 
@@ -1783,6 +1665,7 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
         // Safety: safe because IsA<Display>
         let self_: &Display = unsafe { self.unsafe_cast_ref::<Display>() };
 
+        log::trace!("set_display_size: {:?}", size);
         #[cfg(feature = "bindings")]
         unsafe {
             let (w, h) = size.unwrap_or_default();
@@ -1796,29 +1679,11 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
                 return;
             }
 
+            let (width, height) = size.unwrap_or((0, 0));
+            if let Err(e) = imp.picture.paintable().set_size(width, height) {
+                log::warn!("Failed to set size: {}", e);
+            }
             imp.display_size.replace(size);
-
-            if !self.is_realized() {
-                return;
-            }
-
-            imp.make_current();
-            if let Some((width, height)) = size {
-                unsafe {
-                    gl::BindTexture(gl::TEXTURE_2D, imp.texture_id());
-                    gl::TexImage2D(
-                        gl::TEXTURE_2D,
-                        0,
-                        gl::RGBA as _,
-                        width as _,
-                        height as _,
-                        0,
-                        gl::RGBA,
-                        gl::UNSIGNED_BYTE,
-                        std::ptr::null(),
-                    );
-                }
-            }
 
             self.queue_resize();
         }
@@ -1875,44 +1740,38 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
         self.property("grabbed")
     }
 
-    fn update_area(&self, x: i32, y: i32, w: i32, h: i32, stride: i32, data: &[u8]) {
+    fn update_area(&self, x: i32, y: i32, w: i32, h: i32, stride: i32, data: Option<&[u8]>) {
         // Safety: safe because IsA<Display>
         let self_: &Display = unsafe { self.unsafe_cast_ref::<Display>() };
 
-        #[cfg(windows)]
-        self.set_d3d11_texture2d_scanout(None);
-
         #[cfg(feature = "bindings")]
         unsafe {
-            ffi::rdw_display_update_area(self_.to_glib_none().0, x, y, w, h, stride, data.as_ptr());
+            ffi::rdw_display_update_area(
+                self_.to_glib_none().0,
+                x,
+                y,
+                w,
+                h,
+                stride,
+                data.map_or(std::ptr::null(), |d| d.as_ptr()),
+            );
         }
         #[cfg(not(feature = "bindings"))]
         {
             let imp = self_.imp();
-            imp.make_current();
 
-            // TODO: check data boundaries
-            unsafe {
-                gl::BindTexture(gl::TEXTURE_2D, imp.texture_id());
-                gl::PixelStorei(gl::UNPACK_ROW_LENGTH, stride / 4);
-                gl::TexSubImage2D(
-                    gl::TEXTURE_2D,
-                    0,
-                    x,
-                    y,
-                    w,
-                    h,
-                    gl::BGRA,
-                    gl::UNSIGNED_BYTE,
-                    data.as_ptr() as _,
-                );
+            if let Err(e) = imp
+                .picture
+                .paintable()
+                .update_area(x, y, w, h, stride, data)
+            {
+                log::warn!("Failed to update area: {}", e);
             }
 
             #[cfg(unix)]
             imp.dmabuf.replace(None);
             #[cfg(windows)]
             imp.d3d11_scanout.replace(None);
-            imp.gl_area().queue_render();
         }
     }
 
@@ -1965,108 +1824,19 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
         #[cfg(all(unix, not(feature = "bindings")))]
         {
             let imp = self_.imp();
-            imp.make_current();
 
-            let egl = egl::egl();
-            let egl_image_target = match egl::image_target_texture_2d_oes() {
-                Some(func) => func,
-                _ => {
-                    log::warn!("ImageTargetTexture2DOES support missing");
-                    return;
-                }
-            };
-
-            let egl_dpy = match imp.egl_display() {
-                Some(dpy) => dpy,
-                None => {
-                    log::warn!("Unsupported display kind (or not egl)");
-                    return;
-                }
-            };
-
-            let attribs = &[
-                egl::WIDTH as _,
-                s.width as _,
-                egl::HEIGHT as _,
-                s.height as _,
-                egl::LINUX_DRM_FOURCC_EXT as _,
-                s.fourcc as _,
-                egl::DMA_BUF_PLANE0_FD_EXT as _,
-                s.fd as _,
-                egl::DMA_BUF_PLANE0_PITCH_EXT as _,
-                s.stride as _,
-                egl::DMA_BUF_PLANE0_OFFSET_EXT as _,
-                0,
-                egl::DMA_BUF_PLANE0_MODIFIER_LO_EXT as _,
-                (s.modifier & 0xffffffff) as _,
-                egl::DMA_BUF_PLANE0_MODIFIER_HI_EXT as _,
-                (s.modifier >> 32 & 0xffffffff) as _,
-                egl::NONE as _,
-            ];
-
-            let img = match egl.create_image(
-                egl_dpy,
-                egl::no_context(),
-                egl::LINUX_DMA_BUF_EXT,
-                egl::no_client_buffer(),
-                attribs,
-            ) {
-                Ok(img) => img,
-                Err(e) => {
-                    log::warn!("eglCreateImage() failed: {}", e);
-                    return;
-                }
-            };
-
-            unsafe {
-                gl::BindTexture(gl::TEXTURE_2D, imp.texture_id());
-                egl_image_target(gl::TEXTURE_2D, img.as_ptr() as gl::types::GLeglImageOES);
-            }
-
-            imp.dmabuf.replace(Some(s));
-
-            if let Err(e) = egl.destroy_image(egl_dpy, img) {
-                log::warn!("eglDestroyImage() failed: {}", e);
+            if let Err(e) = imp.picture.paintable().import_dmabuf(&s) {
+                log::warn!("Failed to import DMABUF: {}", e);
             }
         }
     }
 
-    fn render(&self) {
-        // Safety: safe because IsA<Display>
-        let self_: &Display = unsafe { self.unsafe_cast_ref::<Display>() };
-
-        #[cfg(feature = "bindings")]
-        unsafe {
-            ffi::rdw_display_render(self_.to_glib_none().0);
-        }
-        #[cfg(not(feature = "bindings"))]
-        {
-            let imp = self_.imp();
-            imp.make_current();
-
-            unsafe {
-                gl::ClearColor(0.1, 0.1, 0.1, 1.0);
-                gl::Clear(gl::COLOR_BUFFER_BIT);
-                gl::Disable(gl::BLEND);
-
-                if let Some(vp) = imp.viewport() {
-                    gl::Viewport(vp.x(), vp.y(), vp.width(), vp.height());
-                    #[cfg(not(unix))]
-                    let flip = false;
-                    #[cfg(unix)]
-                    let flip = imp.dmabuf.borrow().as_ref().map_or(false, |d| d.y0_top);
-
-                    #[cfg(windows)]
-                    let guard = imp.d3d11_texture2d_acquire0().unwrap();
-                    imp.texture_blit(flip);
-                    #[cfg(windows)]
-                    drop(guard)
-                }
-            }
-
-            imp.gl_area().queue_draw();
-        }
-    }
+    // fn render(&self) {
+    //                 #[cfg(windows)]
+    //                 let guard = imp.d3d11_texture2d_acquire0().unwrap();
+    //                 // imp.texture_blit(flip);
+    //                 #[cfg(windows)]
+    //                 drop(guard)
 
     fn set_alternative_text(&self, alt_text: &str) {
         self.update_property(&[gtk::accessible::Property::Description(alt_text)]);

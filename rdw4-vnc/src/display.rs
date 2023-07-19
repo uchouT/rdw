@@ -222,7 +222,7 @@ pub(crate) mod imp {
                             w as _,
                             h as _,
                         );
-                        this.obj().update_area(x, y, w, h, BaseFramebufferExt::width(fb) * 4, sub);
+                        this.obj().update_area(x, y, w, h, BaseFramebufferExt::width(fb) * 4, Some(sub));
                     }
                     if let Err(e) = this.framebuffer_update_request(true) {
                         log::warn!("Failed to update framebuffer: {}", e);

@@ -10,6 +10,8 @@ pub use khronos_egl::*;
 #[cfg(not(feature = "bindings"))]
 mod imp {
     use super::*;
+    use gdk::prelude::GLContextExt;
+    use gtk::{gdk, glib};
     use once_cell::sync::OnceCell;
     use std::ffi::c_void;
 
@@ -76,10 +78,35 @@ mod imp {
     pub(crate) fn no_client_buffer() -> ClientBuffer {
         unsafe { ClientBuffer::from_ptr(std::ptr::null_mut()) }
     }
+
+    pub(crate) fn display(ctxt: &gdk::GLContext) -> Option<khronos_egl::Display> {
+        use glib::object::Cast;
+
+        let Some(display) = ctxt.display() else {
+            return None;
+        };
+
+        #[cfg(unix)]
+        if let Ok(dpy) = display.clone().downcast::<gdk_wl::WaylandDisplay>() {
+            return dpy.egl_display();
+        }
+
+        #[cfg(unix)]
+        if let Ok(dpy) = display.clone().downcast::<gdk_x11::X11Display>() {
+            return dpy.egl_display();
+        };
+
+        #[cfg(windows)]
+        if let Ok(dpy) = display.clone().downcast::<gdk_win32::Win32Display>() {
+            return dpy.egl_display();
+        };
+
+        None
+    }
 }
 
 #[cfg(not(feature = "bindings"))]
-pub(crate) use imp::*;
+pub use imp::*;
 
 #[cfg(windows)]
 #[derive(Debug)]

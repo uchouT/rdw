@@ -341,7 +341,7 @@ mod imp {
                             w as _,
                             h as _,
                             stride as _,
-                            &buffer[start..end],
+                            Some(&buffer[start..end]),
                         );
                     }
                 }

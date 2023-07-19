@@ -19,7 +19,9 @@ mod usbredir;
 mod win32;
 
 #[cfg(not(feature = "bindings"))]
-mod util;
+mod paintable;
+#[cfg(not(feature = "bindings"))]
+mod picture;
 
 pub use content_provider::ContentProvider;
 pub use display::*;
