@@ -149,11 +149,10 @@ mod imp {
             let session = &self.session;
 
             session.connect_channel_new(clone!(@weak self as this => move |_session, channel| {
-                use spice::ChannelType::*;
+                use spice::ChannelType::{self, *};
 
-                let type_ = match spice::ChannelType::try_from(channel.channel_type()) {
-                    Ok(t) => t,
-                    _ => return,
+                let Ok(type_) = ChannelType::try_from(channel.channel_type()) else {
+                    return;
                 };
 
                 match type_ {
