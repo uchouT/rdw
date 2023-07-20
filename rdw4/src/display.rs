@@ -1785,11 +1785,7 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
 
         #[cfg(feature = "bindings")]
         unsafe {
-            let (w, h) = if let Some(size) = size {
-                (size.0, size.1)
-            } else {
-                (0, 0)
-            };
+            let (w, h) = size.unwrap_or_default();
             ffi::rdw_display_set_display_size(self_.to_glib_none().0, w, h);
         }
         #[cfg(not(feature = "bindings"))]
