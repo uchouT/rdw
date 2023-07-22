@@ -270,7 +270,7 @@ impl App {
                     }
                 }
 
-                window.show();
+                window.present();
             });
         });
 
@@ -281,10 +281,10 @@ impl App {
             action_usb.connect_activate(move |_, _| {
                 let usbredir = app_clone.inner.usbredir.borrow();
                 if let Some(usbredir) = usbredir.as_ref() {
-                    let dialog = gtk::Dialog::new();
+                    let dialog = gtk::Window::new();
                     dialog.set_transient_for(app_clone.inner.app.active_window().as_ref());
                     dialog.set_child(Some(&usbredir.widget()));
-                    dialog.show();
+                    dialog.present();
                 }
             });
             app.inner.app.add_action(&action_usb);

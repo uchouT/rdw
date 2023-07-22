@@ -212,14 +212,14 @@ mod imp {
                                     continue;
                                 }
                                 this.obj().set_display_size(Some((s.width as _, s.height as _)));
-                                this.obj().update_area(0, 0, s.width as _, s.height as _, s.stride as _, &s.data);
+                                this.obj().update_area(0, 0, s.width as _, s.height as _, s.stride as _, Some(&s.data));
                             }
                             Update(u) => {
                                 if u.format != 0x20020888 {
                                     log::warn!("Format not yet supported: {:X}", u.format);
                                     continue;
                                 }
-                                this.obj().update_area(u.x as _, u.y as _, u.w as _, u.h as _, u.stride as _, &u.data);
+                                this.obj().update_area(u.x as _, u.y as _, u.w as _, u.h as _, u.stride as _, Some(&u.data));
                             }
                             #[cfg(windows)]
                             ScanoutMap(s) => {
@@ -242,7 +242,7 @@ mod imp {
 
                                 let map = MemoryMap { ptr, handle, offset, size };
                                 this.obj().set_display_size(Some((s.width as _, s.height as _)));
-                                this.obj().update_area(0, 0, s.width as _, s.height as _, s.stride as _, map.as_bytes());
+                                this.obj().update_area(0, 0, s.width as _, s.height as _, s.stride as _, Some(map.as_bytes()));
                                 this.scanout_map.replace(Some((map, s.stride)));
                             }
                             #[cfg(windows)]
@@ -255,7 +255,7 @@ mod imp {
                                 };
                                 let stride = *stride;
                                 let bytes = map.as_bytes();
-                                this.obj().update_area(u.x as _, u.y as _, u.w as _, u.h as _, stride as _, &bytes[u.y as usize * stride as usize + u.x as usize * 4..]);
+                                this.obj().update_area(u.x as _, u.y as _, u.w as _, u.h as _, stride as _, Some(&bytes[u.y as usize * stride as usize + u.x as usize * 4..]));
                             }
                             #[cfg(windows)]
                             ScanoutD3dTexture2d(s) => {
@@ -273,9 +273,9 @@ mod imp {
                                 }));
                             }
                             #[cfg(windows)]
-                            UpdateD3dTexture2d { wait_tx, .. } => {
+                            UpdateD3dTexture2d { wait_tx, update } => {
                                 this.obj().set_d3d11_texture2d_can_acquire(true);
-                                this.obj().render();
+                                this.obj().update_area(update.x, update.y, update.w, update.h, 0, None);
                                 this.obj().set_d3d11_texture2d_can_acquire(false);
                                 let _ = wait_tx.send(());
                             }
@@ -294,8 +294,8 @@ mod imp {
                                 });
                             }
                             #[cfg(unix)]
-                            UpdateDMABUF { wait_tx, .. } => {
-                                this.obj().render();
+                            UpdateDMABUF { wait_tx, update } => {
+                                this.obj().update_area(update.x, update.y, update.w, update.h, 0, None);
                                 let _ = wait_tx.send(());
                             }
                             Disable => {
@@ -372,14 +372,14 @@ enum ConsoleEvent {
     ScanoutD3dTexture2d(qemu_display::ScanoutD3dTexture2d),
     #[cfg(windows)]
     UpdateD3dTexture2d {
-        _update: qemu_display::UpdateD3dTexture2d,
+        update: qemu_display::UpdateD3dTexture2d,
         wait_tx: futures::channel::oneshot::Sender<()>,
     },
     #[cfg(unix)]
     ScanoutDMABUF(qemu_display::ScanoutDMABUF),
     #[cfg(unix)]
     UpdateDMABUF {
-        _update: qemu_display::UpdateDMABUF,
+        update: qemu_display::UpdateDMABUF,
         wait_tx: futures::channel::oneshot::Sender<()>,
     },
     Disable,
@@ -424,9 +424,9 @@ impl ConsoleListenerD3d11Handler for ConsoleHandler {
     }
 
     #[cfg(windows)]
-    async fn update_texture2d(&mut self, _update: qemu_display::UpdateD3dTexture2d) {
+    async fn update_texture2d(&mut self, update: qemu_display::UpdateD3dTexture2d) {
         let (wait_tx, wait_rx) = futures::channel::oneshot::channel();
-        self.send(ConsoleEvent::UpdateD3dTexture2d { _update, wait_tx });
+        self.send(ConsoleEvent::UpdateD3dTexture2d { update, wait_tx });
         if let Err(e) = wait_rx.await {
             log::warn!("wait update d3d texture2d failed: {}", e);
         }
@@ -449,9 +449,9 @@ impl ConsoleListenerHandler for ConsoleHandler {
     }
 
     #[cfg(unix)]
-    async fn update_dmabuf(&mut self, _update: qemu_display::UpdateDMABUF) {
+    async fn update_dmabuf(&mut self, update: qemu_display::UpdateDMABUF) {
         let (wait_tx, wait_rx) = futures::channel::oneshot::channel();
-        self.send(ConsoleEvent::UpdateDMABUF { _update, wait_tx });
+        self.send(ConsoleEvent::UpdateDMABUF { update, wait_tx });
         if let Err(e) = wait_rx.await {
             log::warn!("wait update dmabuf failed: {}", e);
         }
