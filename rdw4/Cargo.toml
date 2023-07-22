@@ -12,6 +12,10 @@ capi = ["env_logger"]
 [build-dependencies]
 cargo_metadata = "0.14"
 cbindgen = { path = "../cbindgen", features = ["gobject"] }
+system-deps = "2.0"
+
+[package.metadata.system-deps]
+rdw4 = { version = "0.1", feature = "bindings" }
 
 [dependencies]
 log = "0.4"

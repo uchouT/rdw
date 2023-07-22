@@ -59,6 +59,6 @@ fn main() {
     }
 
     if cfg!(feature = "bindings") {
-        println!("cargo:rustc-link-lib=dylib=rdw4");
+        system_deps::Config::new().probe().unwrap();
     }
 }
