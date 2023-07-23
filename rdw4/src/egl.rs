@@ -11,7 +11,7 @@ pub use khronos_egl::*;
 mod imp {
     use super::*;
     use gdk::prelude::GLContextExt;
-    use gtk::{gdk, glib};
+    use gtk::gdk;
     use once_cell::sync::OnceCell;
     use std::ffi::c_void;
 
@@ -80,24 +80,25 @@ mod imp {
     }
 
     pub(crate) fn display(ctxt: &gdk::GLContext) -> Option<khronos_egl::Display> {
+        #[cfg(any(wayland, windows, x11))]
         use glib::object::Cast;
 
-        let Some(display) = ctxt.display() else {
+        let Some(_dpy) = ctxt.display() else {
             return None;
         };
 
         #[cfg(wayland)]
-        if let Ok(dpy) = display.clone().downcast::<gdk_wl::WaylandDisplay>() {
+        if let Ok(dpy) = _dpy.clone().downcast::<gdk_wl::WaylandDisplay>() {
             return dpy.egl_display();
         }
 
-        #[cfg(unix)]
-        if let Ok(dpy) = display.clone().downcast::<gdk_x11::X11Display>() {
+        #[cfg(x11)]
+        if let Ok(dpy) = _dpy.clone().downcast::<gdk_x11::X11Display>() {
             return dpy.egl_display();
         };
 
         #[cfg(windows)]
-        if let Ok(dpy) = display.clone().downcast::<gdk_win32::Win32Display>() {
+        if let Ok(dpy) = _dpy.clone().downcast::<gdk_win32::Win32Display>() {
             return dpy.egl_display();
         };
 
