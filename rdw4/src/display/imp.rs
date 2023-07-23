@@ -385,24 +385,12 @@ impl WidgetImpl for Display {
     }
 
     fn unrealize(&self) {
-        #[cfg(wayland)]
-        if self
-            .obj()
-            .display()
-            .downcast::<gdk_wl::WaylandDisplay>()
-            .is_ok()
-        {
-            self.wayland.unrealize();
-        }
-
-        #[cfg(windows)]
-        if self
-            .obj()
-            .display()
-            .downcast::<gdk_win32::Win32Display>()
-            .is_ok()
-        {
-            self.unrealize_win32();
+        match self.obj().display().backend() {
+            #[cfg(wayland)]
+            gdk::Backend::Wayland => self.wayland.unrealize(),
+            #[cfg(windows)]
+            gdk::Backend::Win32 => self.unrealize_win32(),
+            _ => (),
         }
 
         self.parent_unrealize();
