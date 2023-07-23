@@ -18,18 +18,6 @@ use windows::Win32::{
 };
 
 #[cfg(all(unix, not(feature = "bindings")))]
-use wayland_protocols::wp::{
-    pointer_constraints::zv1::client::{
-        zwp_locked_pointer_v1::ZwpLockedPointerV1,
-        zwp_pointer_constraints_v1::{self, ZwpPointerConstraintsV1},
-    },
-    relative_pointer::zv1::client::{
-        zwp_relative_pointer_manager_v1::ZwpRelativePointerManagerV1,
-        zwp_relative_pointer_v1::ZwpRelativePointerV1,
-    },
-};
-
-#[cfg(all(unix, not(feature = "bindings")))]
 mod wayland;
 
 #[cfg(windows)]
@@ -86,17 +74,7 @@ pub struct Display {
     pub(crate) dmabuf: RefCell<Option<RdwDmabufScanout>>,
 
     #[cfg(unix)]
-    pub(crate) wl_queue: RefCell<Option<gdk_wl::wayland_client::QueueHandle<crate::Display>>>,
-    #[cfg(unix)]
-    pub(crate) wl_source: Cell<Option<glib::SourceId>>,
-    #[cfg(unix)]
-    pub(crate) wl_rel_manager: RefCell<Option<ZwpRelativePointerManagerV1>>,
-    #[cfg(unix)]
-    pub(crate) wl_rel_pointer: RefCell<Option<ZwpRelativePointerV1>>,
-    #[cfg(unix)]
-    pub(crate) wl_pointer_constraints: RefCell<Option<ZwpPointerConstraintsV1>>,
-    #[cfg(unix)]
-    pub(crate) wl_lock_pointer: RefCell<Option<ZwpLockedPointerV1>>,
+    wayland: wayland::Helper,
 
     #[cfg(windows)]
     pub(crate) win_mouse: Cell<[isize; 3]>,
@@ -246,9 +224,8 @@ impl ObjectImpl for Display {
 
     fn dispose(&self) {
         #[cfg(unix)]
-        if let Some(source) = self.wl_source.take() {
-            source.remove();
-        }
+        self.wayland.dispose();
+
         while let Some(child) = self.obj().first_child() {
             child.unparent();
         }
@@ -398,7 +375,7 @@ impl WidgetImpl for Display {
 
         #[cfg(unix)]
         if let Ok(dpy) = self.obj().display().downcast::<gdk_wl::WaylandDisplay>() {
-            self.realize_wl(&dpy);
+            self.wayland.realize(&self.obj(), &dpy);
         }
 
         #[cfg(windows)]
@@ -415,7 +392,7 @@ impl WidgetImpl for Display {
             .downcast::<gdk_wl::WaylandDisplay>()
             .is_ok()
         {
-            self.unrealize_wl();
+            self.wayland.unrealize();
         }
 
         #[cfg(windows)]
@@ -668,52 +645,6 @@ impl Display {
             .emit_by_name::<()>("resize-request", &[&width, &height, &w_mm, &h_mm]);
     }
 
-    #[cfg(unix)]
-    fn unrealize_wl(&self) {
-        self.wl_rel_manager.take();
-        self.wl_pointer_constraints.take();
-        self.wl_queue.take();
-        self.wl_source.set(None);
-    }
-
-    #[cfg(unix)]
-    fn realize_wl(&self, dpy: &gdk_wl::WaylandDisplay) {
-        use gdk_wl::wayland_client::{backend::Backend, globals::registry_queue_init, Connection};
-        use std::os::unix::io::AsRawFd;
-
-        let wl_display =
-            unsafe { gdk_wl::ffi::gdk_wayland_display_get_wl_display(dpy.to_glib_none().0) };
-        let connection = Connection::from_backend(unsafe {
-            Backend::from_foreign_display(wl_display as *mut _)
-        });
-        let (globals, mut queue) = registry_queue_init::<crate::Display>(&connection).unwrap();
-
-        let rel_manager = globals.bind(&queue.handle(), 1..=1, ()).unwrap();
-        self.wl_rel_manager.replace(Some(rel_manager));
-        let pointer_constraints = globals.bind(&queue.handle(), 1..=1, ()).unwrap();
-        self.wl_pointer_constraints
-            .replace(Some(pointer_constraints));
-
-        let fd = connection
-            .prepare_read()
-            .unwrap()
-            .connection_fd()
-            .as_raw_fd();
-        let source = glib::source::unix_fd_add_local(fd, glib::IOCondition::IN, move |_, _| {
-            connection.prepare_read().unwrap().read().unwrap();
-            glib::ControlFlow::Continue
-        });
-
-        self.wl_queue.replace(Some(queue.handle()));
-        glib::MainContext::default().spawn_local(
-            clone!(@weak self as this => @default-panic, async move {
-                let mut obj = this.obj().clone();
-                std::future::poll_fn(|cx| queue.poll_dispatch_pending(cx, &mut obj)).await.unwrap();
-            }),
-        );
-        self.wl_source.set(Some(source))
-    }
-
     #[cfg(windows)]
     fn unrealize_win32(&self) {}
 
@@ -841,13 +772,8 @@ impl Display {
     pub(crate) fn ungrab_mouse(&self) {
         if self.grabbed.get().contains(Grab::MOUSE) {
             #[cfg(unix)]
-            if let Some(lock) = self.wl_lock_pointer.take() {
-                lock.destroy();
-            }
-            #[cfg(unix)]
-            if let Some(rel_pointer) = self.wl_rel_pointer.take() {
-                rel_pointer.destroy();
-            }
+            self.wayland.ungrab_mouse();
+
             #[cfg(windows)]
             unsafe {
                 windows::Win32::UI::WindowsAndMessaging::ClipCursor(None);
@@ -971,38 +897,7 @@ impl Display {
 
     #[cfg(unix)]
     fn try_grab_device(&self, device: gdk::Device) -> bool {
-        let device = match device.downcast::<gdk_wl::WaylandDevice>() {
-            Ok(device) => device,
-            _ => return false,
-        };
-        let pointer = device.wl_pointer().unwrap();
-        let queue = self.wl_queue.borrow();
-        let handle = queue.as_ref().unwrap();
-
-        if self.wl_lock_pointer.borrow().is_none() {
-            if let Some(constraints) = &*self.wl_pointer_constraints.borrow() {
-                if let Some(surf) = self.wl_surface() {
-                    let lock = constraints.lock_pointer(
-                        &surf,
-                        &pointer,
-                        None,
-                        zwp_pointer_constraints_v1::Lifetime::Persistent as _,
-                        handle,
-                        (),
-                    );
-                    self.wl_lock_pointer.replace(Some(lock));
-                }
-            }
-        }
-
-        if self.wl_rel_pointer.borrow().is_none() {
-            if let Some(rel_manager) = &*self.wl_rel_manager.borrow() {
-                let rel_pointer = rel_manager.get_relative_pointer(&pointer, handle, ());
-                self.wl_rel_pointer.replace(Some(rel_pointer));
-            }
-        }
-
-        true
+        self.wayland.try_grab_device(&self.obj(), device)
     }
 
     #[cfg(windows)]
