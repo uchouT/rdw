@@ -86,7 +86,7 @@ mod imp {
             return None;
         };
 
-        #[cfg(unix)]
+        #[cfg(wayland)]
         if let Ok(dpy) = display.clone().downcast::<gdk_wl::WaylandDisplay>() {
             return dpy.egl_display();
         }

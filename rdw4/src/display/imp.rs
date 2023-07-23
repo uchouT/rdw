@@ -17,7 +17,7 @@ use windows::Win32::{
     UI::WindowsAndMessaging::HHOOK,
 };
 
-#[cfg(all(unix, not(feature = "bindings")))]
+#[cfg(all(wayland, not(feature = "bindings")))]
 mod wayland;
 
 #[cfg(windows)]
@@ -73,7 +73,7 @@ pub struct Display {
     #[cfg(unix)]
     pub(crate) dmabuf: RefCell<Option<RdwDmabufScanout>>,
 
-    #[cfg(unix)]
+    #[cfg(wayland)]
     wayland: wayland::Helper,
 
     #[cfg(windows)]
@@ -223,7 +223,7 @@ impl ObjectImpl for Display {
     }
 
     fn dispose(&self) {
-        #[cfg(unix)]
+        #[cfg(wayland)]
         self.wayland.dispose();
 
         while let Some(child) = self.obj().first_child() {
@@ -373,7 +373,7 @@ impl WidgetImpl for Display {
     fn realize(&self) {
         self.parent_realize();
 
-        #[cfg(unix)]
+        #[cfg(wayland)]
         if let Ok(dpy) = self.obj().display().downcast::<gdk_wl::WaylandDisplay>() {
             self.wayland.realize(&self.obj(), &dpy);
         }
@@ -385,7 +385,7 @@ impl WidgetImpl for Display {
     }
 
     fn unrealize(&self) {
-        #[cfg(unix)]
+        #[cfg(wayland)]
         if self
             .obj()
             .display()
@@ -578,6 +578,7 @@ impl Display {
         self.obj().emit_by_name::<()>("motion", &[&x, &y]);
     }
 
+    #[cfg(any(wayland, windows))]
     pub(crate) fn do_motion_relative(&self, dx: f64, dy: f64) {
         if self.read_only() {
             return;
@@ -771,7 +772,7 @@ impl Display {
 
     pub(crate) fn ungrab_mouse(&self) {
         if self.grabbed.get().contains(Grab::MOUSE) {
-            #[cfg(unix)]
+            #[cfg(wayland)]
             self.wayland.ungrab_mouse();
 
             #[cfg(windows)]
@@ -895,7 +896,7 @@ impl Display {
         true
     }
 
-    #[cfg(unix)]
+    #[cfg(wayland)]
     fn try_grab_device(&self, device: gdk::Device) -> bool {
         self.wayland.try_grab_device(&self.obj(), device)
     }
@@ -934,7 +935,7 @@ impl Display {
         true
     }
 
-    #[cfg(not(any(unix, windows)))]
+    #[cfg(not(any(wayland, windows)))]
     fn try_grab_device(&self, _device: gdk::Device) -> bool {
         false
     }
@@ -1049,7 +1050,7 @@ impl Display {
             .map(|w| w.handle())
     }
 
-    #[cfg(unix)]
+    #[cfg(wayland)]
     fn wl_surface(&self) -> Option<gdk_wl::wayland_client::protocol::wl_surface::WlSurface> {
         self.surface()
             .and_then(|s| s.downcast::<gdk_wl::WaylandSurface>().ok())
@@ -1060,7 +1061,7 @@ impl Display {
     pub(crate) fn egl_display(&self) -> Option<egl::Display> {
         let widget = self.obj();
 
-        #[cfg(unix)]
+        #[cfg(wayland)]
         if let Ok(dpy) = widget.display().downcast::<gdk_wl::WaylandDisplay>() {
             return dpy.egl_display();
         }
@@ -1118,10 +1119,10 @@ impl Display {
         use windows::Win32::Foundation::HANDLE;
 
         let Some(s) = s else {
-                self.d3d11_scanout.replace(None);
-                self.d3d11_texture.replace(None);
-                return Ok(());
-            };
+            self.d3d11_scanout.replace(None);
+            self.d3d11_texture.replace(None);
+            return Ok(());
+        };
 
         let d3d11_device = self
             .d3d11_device

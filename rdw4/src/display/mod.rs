@@ -1,5 +1,4 @@
 #[cfg(unix)]
-use gdk_wl::prelude::*;
 use glib::{signal::SignalHandlerId, subclass::prelude::*, translate::*};
 use gtk::{gdk, glib, prelude::*, subclass::prelude::WidgetImpl};
 
