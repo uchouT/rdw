@@ -1,7 +1,5 @@
 use super::*;
 use crate::picture::Picture;
-#[cfg(windows)]
-use crate::win32;
 use glib::{clone, subclass::Signal, SourceId};
 use gtk::{graphene, subclass::prelude::*};
 use once_cell::sync::{Lazy, OnceCell};
@@ -10,31 +8,12 @@ use std::{
     collections::HashSet,
     time::Duration,
 };
-#[cfg(windows)]
-use windows::Win32::{
-    Graphics::Direct3D11::{ID3D11Device1, ID3D11Texture2D},
-    Graphics::Dxgi::IDXGIKeyedMutex,
-    UI::WindowsAndMessaging::HHOOK,
-};
 
 #[cfg(all(wayland, not(feature = "bindings")))]
 mod wayland;
 
-#[cfg(windows)]
-pub(crate) struct D3d11TexGuard(IDXGIKeyedMutex);
-
-#[cfg(windows)]
-impl Drop for D3d11TexGuard {
-    fn drop(&mut self) {
-        if let Err(e) = unsafe {
-            self.0
-                .ReleaseSync(0)
-                .map_err(|e| format!("Failed to release Mutex: {}", e))
-        } {
-            log::warn!("{:?}", e);
-        }
-    }
-}
+#[cfg(all(windows, not(feature = "bindings")))]
+mod win32;
 
 unsafe impl ClassStruct for RdwDisplayClass {
     type Type = Display;
@@ -68,32 +47,13 @@ pub struct Display {
     // the shortcut to ungrab key/mouse (to be configurable and extended with ctrl-alt)
     pub(crate) grab_shortcut: OnceCell<gtk::ShortcutTrigger>,
     pub(crate) grabbed: Cell<Grab>,
-    pub(crate) shortcuts_inhibited_id: Cell<Option<SignalHandlerId>>,
-
-    #[cfg(unix)]
-    pub(crate) dmabuf: RefCell<Option<RdwDmabufScanout>>,
+    pub(crate) shortcuts_inhibited_id: Cell<Option<glib::SignalHandlerId>>,
 
     #[cfg(wayland)]
     wayland: wayland::Helper,
 
     #[cfg(windows)]
-    pub(crate) win_mouse: Cell<[isize; 3]>,
-    #[cfg(windows)]
-    pub(crate) win_mouse_speed: Cell<isize>,
-    #[cfg(windows)]
-    pub(crate) win_filter: Cell<Option<gdk_win32::Win32DisplayFilterHandle>>,
-    #[cfg(windows)]
-    pub(crate) win_hook: Cell<Option<HHOOK>>,
-    #[cfg(windows)]
-    pub(crate) win_mouse_hook: Cell<Option<HHOOK>>,
-    #[cfg(windows)]
-    pub(crate) d3d11_device: OnceCell<ID3D11Device1>,
-    #[cfg(windows)]
-    pub(crate) d3d11_texture: RefCell<Option<ID3D11Texture2D>>,
-    #[cfg(windows)]
-    pub(crate) d3d11_scanout: RefCell<Option<RdwD3d11Texture2dScanout>>,
-    #[cfg(windows)]
-    pub(crate) d3d11_texture_can_acquire: Cell<bool>,
+    win32: win32::Helper,
 }
 
 #[glib::object_subclass]
@@ -123,7 +83,7 @@ impl ObjectSubclass for Display {
                     .unwrap_or(std::ptr::null())
             });
             gl::load_with(epoxy::get_proc_addr);
-            assert_eq!(unsafe { gl::GetError() }, gl::NO_ERROR);
+            //assert_eq!(unsafe { gl::GetError() }, gl::NO_ERROR);
         }
     }
 }
@@ -149,7 +109,7 @@ impl ObjectImpl for Display {
         ec.connect_key_pressed(
             clone!(@weak self as this => @default-panic, move |ec, keyval, keycode, _state| {
                 this.key_pressed(ec, keyval, keycode);
-                glib::ControlFlow::Break
+                glib::Propagation::Stop
             }),
         );
         ec.connect_key_released(
@@ -216,7 +176,7 @@ impl ObjectImpl for Display {
                 } else if dx <= -1.0 {
                     this.do_scroll_discrete(Scroll::Left);
                 }
-                glib::ControlFlow::Continue
+                glib::Propagation::Proceed
             }),
         );
         self.picture.add_controller(ec);
@@ -380,7 +340,7 @@ impl WidgetImpl for Display {
 
         #[cfg(windows)]
         if let Ok(dpy) = self.obj().display().downcast::<gdk_win32::Win32Display>() {
-            self.realize_win32(&dpy);
+            self.win32.realize(&self.obj(), &dpy);
         }
     }
 
@@ -389,7 +349,7 @@ impl WidgetImpl for Display {
             #[cfg(wayland)]
             gdk::Backend::Wayland => self.wayland.unrealize(),
             #[cfg(windows)]
-            gdk::Backend::Win32 => self.unrealize_win32(),
+            gdk::Backend::Win32 => self.win32.unrealize(),
             _ => (),
         }
 
@@ -563,6 +523,10 @@ impl Display {
         if self.read_only() {
             return;
         }
+        let (pw, ph) = self.picture.paintable().size();
+        let (_, _, w, h) = self.paintable_area();
+        let x = x * pw as f64 / w as f64;
+        let y = y * ph as f64 / h as f64;
         self.obj().emit_by_name::<()>("motion", &[&x, &y]);
     }
 
@@ -634,114 +598,6 @@ impl Display {
             .emit_by_name::<()>("resize-request", &[&width, &height, &w_mm, &h_mm]);
     }
 
-    #[cfg(windows)]
-    fn unrealize_win32(&self) {}
-
-    #[cfg(windows)]
-    fn realize_win32(&self, dpy: &gdk_win32::Win32Display) {
-        use windows::Win32::{
-            Devices::HumanInterfaceDevice::{HID_USAGE_GENERIC_MOUSE, HID_USAGE_PAGE_GENERIC},
-            UI::Input::{RegisterRawInputDevices, RAWINPUTDEVICE, RIDEV_INPUTSINK},
-        };
-
-        let Some(hwnd) = self.win32_handle() else {
-                log::warn!("Failed to get windows handle");
-                return;
-            };
-        let rid = RAWINPUTDEVICE {
-            usUsagePage: HID_USAGE_PAGE_GENERIC,
-            usUsage: HID_USAGE_GENERIC_MOUSE,
-            dwFlags: RIDEV_INPUTSINK,
-            hwndTarget: hwnd,
-        };
-        if let Err(e) =
-            unsafe { RegisterRawInputDevices(&[rid], std::mem::size_of_val(&rid) as _).ok() }
-        {
-            log::warn!("Failed to RegisterRawInputDevices: {e}");
-            return;
-        }
-
-        let filter = dpy.add_filter(
-            clone!(@weak self as this => @default-panic, move |_, msg, _rv| {
-                use windows::Win32::UI::Input::{
-                    GetRawInputData, HRAWINPUT, RAWINPUT, RAWINPUTHEADER, RID_INPUT, RIM_TYPEMOUSE,
-                };
-                use windows::Win32::UI::WindowsAndMessaging::WM_INPUT;
-
-                if !this.grabbed.get().contains(Grab::MOUSE) || msg.message != WM_INPUT {
-                    return gdk_win32::Win32MessageFilterReturn::Continue;
-                }
-
-                let mut input = RAWINPUT::default();
-                let mut pcbsize = std::mem::size_of_val(&input) as u32;
-                unsafe {
-                    let res = GetRawInputData(
-                        HRAWINPUT(msg.lParam.0),
-                        RID_INPUT,
-                        Some(&mut input as *mut _ as *mut _),
-                        &mut pcbsize as *mut _,
-                        std::mem::size_of::<RAWINPUTHEADER>() as _,
-                    );
-                    if res == u32::MAX {
-                        log::warn!("Failed to GetRawInputData");
-                    }
-                    if input.header.dwType == RIM_TYPEMOUSE.0 {
-                        let (dx, dy) = (input.data.mouse.lLastX, input.data.mouse.lLastY);
-                        let scale = this.obj().scale_factor() as f64;
-                        let (dx, dy) = (dx as f64 / scale, dy as f64 / scale);
-                        this.do_motion_relative(dx, dy);
-                    }
-                }
-
-                gdk_win32::Win32MessageFilterReturn::Continue
-            }),
-        );
-
-        self.win_filter.set(Some(filter));
-
-        #[cfg(windows)]
-        if let Err(e) = self.realize_gl_win32() {
-            log::warn!("{}", e);
-        }
-    }
-
-    #[cfg(windows)]
-    unsafe fn realize_gl_win32(&self) -> Result<(), String> {
-        let dpy = self.egl_display().ok_or("No EGL display".to_string())?;
-        let query_display =
-            egl::query_display_attrib().ok_or("No eglQueryDisplayAttrib".to_string())?;
-        let query_device =
-            egl::query_device_attrib().ok_or("No eglQueryDeviceAttrib".to_string())?;
-        let mut device: egl::EGLDevice = std::ptr::null_mut();
-
-        if query_display(
-            dpy.as_ptr(),
-            egl::DEVICE_EXT,
-            &mut device as *mut _ as *mut _,
-        ) == 0
-        {
-            return Err("Failed to query EGL display device".into());
-        }
-
-        let mut d3d11_device: *mut ID3D11Device1 = std::ptr::null_mut();
-        if query_device(
-            device,
-            egl::D3D11_DEVICE_ANGLE,
-            &mut d3d11_device as *mut _ as *mut _,
-        ) == 0
-        {
-            return Err("Failed to query EGL D3D11 device".into());
-        }
-
-        // there should be a better way, to get a &ID3D instead
-        let d3d11_device = std::ptr::NonNull::new_unchecked(d3d11_device);
-        let d3d11_device: ID3D11Device1 = std::mem::transmute(d3d11_device);
-        self.d3d11_device.set(d3d11_device.clone()).unwrap();
-        std::mem::forget(d3d11_device);
-
-        Ok(())
-    }
-
     fn ungrab_keyboard(&self) {
         if !self.grabbed.get().contains(Grab::KEYBOARD) {
             return;
@@ -750,9 +606,7 @@ impl Display {
         if let Some(toplevel) = self.toplevel() {
             toplevel.restore_system_shortcuts();
             #[cfg(windows)]
-            if let Some(h) = self.win_hook.take() {
-                let _ = win32::unhook(h);
-            }
+            self.win32.ungrab_keyboard();
             self.grabbed.set(self.grabbed.get() - Grab::KEYBOARD);
             self.obj().notify("grabbed");
         }
@@ -764,12 +618,7 @@ impl Display {
             self.wayland.ungrab_mouse();
 
             #[cfg(windows)]
-            unsafe {
-                windows::Win32::UI::WindowsAndMessaging::ClipCursor(None);
-                if let Some(h) = self.win_mouse_hook.take() {
-                    let _ = win32::unhook(h);
-                }
-            }
+            self.win32.ungrab_mouse();
             self.restore_accel_mouse();
 
             self.grabbed.set(self.grabbed.get() - Grab::MOUSE);
@@ -854,20 +703,17 @@ impl Display {
 
     fn try_grab_keyboard(&self) -> bool {
         if self.grabbed.get().contains(Grab::KEYBOARD) {
-            return false;
+            return true;
         }
 
         let Some(toplevel) = self.toplevel() else {
-                return false;
-            };
+            return false;
+        };
 
         toplevel.inhibit_system_shortcuts(None::<&gdk::ButtonEvent>);
         // Apparently, inhibit-system is not implemented on win32 yet
         #[cfg(windows)]
-        match win32::hook_keyboard() {
-            Ok(h) => self.win_hook.set(Some(h)),
-            Err(e) => log::warn!("Failed to set keyboard hook: {}", e),
-        }
+        self.win32.grab_keyboard();
 
         let id = toplevel.connect_shortcuts_inhibited_notify(
             clone!(@weak self as this => @default-panic, move |toplevel| {
@@ -884,47 +730,14 @@ impl Display {
         true
     }
 
-    #[cfg(wayland)]
-    fn try_grab_device(&self, device: gdk::Device) -> bool {
-        self.wayland.try_grab_device(&self.obj(), device)
-    }
-
-    #[cfg(windows)]
     fn try_grab_device(&self, _device: gdk::Device) -> bool {
-        use windows::Win32::UI::WindowsAndMessaging::{ClipCursor, GetWindowRect};
+        #[cfg(wayland)]
+        return self.wayland.try_grab_device(&self.obj(), _device);
 
-        let h = match self.win32_handle() {
-            Some(h) => h,
-            None => return false,
-        };
-        let mut win_rect = unsafe { std::mem::zeroed() };
-        if let Err(e) = unsafe { GetWindowRect(h, &mut win_rect).ok() } {
-            log::warn!("Failed to GetWindowRect: {e}");
-            return false;
-        }
+        #[cfg(windows)]
+        return self.win32.try_grab_device(&self.obj(), _device);
 
-        // a very small clip, hopefully in the center of our widget.
-        // FIXME: find real coordinates of our own widget instead
-        win_rect.left = (win_rect.left + win_rect.right) / 2;
-        win_rect.right = win_rect.left + 1;
-        win_rect.top = (win_rect.top + win_rect.bottom) / 2;
-        win_rect.bottom = win_rect.top + 1;
-
-        if let Err(e) = unsafe { ClipCursor(Some(&win_rect)).ok() } {
-            log::warn!("Failed to ClipCursor: {e}");
-            return false;
-        }
-
-        match win32::hook_mouse() {
-            Ok(h) => self.win_mouse_hook.set(Some(h)),
-            Err(e) => log::warn!("Failed to set mouse hook: {}", e),
-        }
-
-        true
-    }
-
-    #[cfg(not(any(wayland, windows)))]
-    fn try_grab_device(&self, _device: gdk::Device) -> bool {
+        #[cfg(not(any(wayland, windows)))]
         false
     }
 
@@ -934,7 +747,7 @@ impl Display {
             return false;
         }
         if self.obj().grabbed().contains(Grab::MOUSE) {
-            return false;
+            return true;
         }
 
         if let Some(default_seat) = gdk::traits::DisplayExt::default_seat(&self.obj().display()) {
@@ -952,44 +765,14 @@ impl Display {
 
     fn save_accel_mouse(&self) {
         #[cfg(windows)]
-        {
-            match win32::spi_get_mouse() {
-                Ok(mouse) => self.win_mouse.set(mouse),
-                Err(e) => log::warn!("Failed to spi_get_mouse: {e}"),
-            }
-            match win32::spi_get_mouse_speed() {
-                Ok(speed) => self.win_mouse_speed.set(speed),
-                Err(e) => log::warn!("Failed to spi_get_mouse: {e}"),
-            }
-
-            let mouse: [isize; 3] = Default::default();
-            if let Err(e) = win32::spi_set_mouse(mouse) {
-                log::warn!("Failed to spi_set_mouse: {e}");
-            }
-            if let Err(e) = win32::spi_set_mouse_speed(10) {
-                log::warn!("Failed to spi_set_mouse_speed: {e}");
-            }
-        }
-        #[cfg(not(windows))]
-        {
-            // todo
-        }
+        self.win32.save_accel_mouse()
+        // todo
     }
 
     fn restore_accel_mouse(&self) {
         #[cfg(windows)]
-        {
-            if let Err(e) = win32::spi_set_mouse(self.win_mouse.get()) {
-                log::warn!("Failed to spi_set_mouse: {e}");
-            }
-            if let Err(e) = win32::spi_set_mouse_speed(self.win_mouse_speed.get()) {
-                log::warn!("Failed to spi_set_mouse_speed: {e}");
-            }
-        }
-        #[cfg(not(windows))]
-        {
-            // todo
-        }
+        self.win32.restore_accel_mouse()
+        // todo
     }
 
     fn try_grab(&self) -> Grab {
@@ -1019,16 +802,15 @@ impl Display {
     }
 
     fn toplevel(&self) -> Option<gdk::Toplevel> {
-        let obj = self.obj();
-        obj.root()
+        self.obj()
+            .root()
             .and_then(|r| r.native())
             .map(|n| n.surface())
             .and_then(|s| s.downcast::<gdk::Toplevel>().ok())
     }
 
     fn surface(&self) -> Option<gdk::Surface> {
-        let obj = self.obj();
-        obj.native().map(|n| n.surface())
+        self.obj().native().map(|n| n.surface())
     }
 
     #[cfg(windows)]
@@ -1042,114 +824,6 @@ impl Display {
     fn wl_surface(&self) -> Option<gdk_wl::wayland_client::protocol::wl_surface::WlSurface> {
         self.surface()
             .and_then(|s| s.downcast::<gdk_wl::WaylandSurface>().ok())
-            .map(|w| w.wl_surface().unwrap())
-    }
-
-    #[cfg(windows)]
-    pub(crate) fn egl_display(&self) -> Option<egl::Display> {
-        let widget = self.obj();
-
-        #[cfg(wayland)]
-        if let Ok(dpy) = widget.display().downcast::<gdk_wl::WaylandDisplay>() {
-            return dpy.egl_display();
-        }
-
-        #[cfg(unix)]
-        if let Ok(dpy) = widget.display().downcast::<gdk_x11::X11Display>() {
-            return dpy.egl_display();
-        };
-
-        #[cfg(windows)]
-        if let Ok(dpy) = widget.display().downcast::<gdk_win32::Win32Display>() {
-            return dpy.egl_display();
-        };
-
-        None
-    }
-
-    #[cfg(windows)]
-    pub(crate) fn d3d11_texture2d_acquire0(&self) -> Result<Option<D3d11TexGuard>, String> {
-        use windows::{core::Interface, Win32::System::WindowsProgramming::INFINITE};
-
-        if !self.d3d11_texture_can_acquire.get() {
-            log::debug!("can't acquire texture2d");
-            return Ok(None);
-        }
-        let Some(tex) = &*self.d3d11_texture.borrow() else {
-                log::debug!("no texture2d");
-                return Ok(None);
-            };
-
-        log::trace!("acquire d3d texture, begin");
-        let mutex: IDXGIKeyedMutex = tex
-            .cast()
-            .map_err(|e| format!("Failed to cast to Mutex: {}", e))?;
-        unsafe {
-            mutex
-                .AcquireSync(0, INFINITE)
-                .map_err(|e| format!("Failed to acquire Mutex: {}", e))?
-        }
-        log::trace!("acquire d3d texture, end");
-
-        Ok(Some(D3d11TexGuard(mutex)))
-    }
-
-    #[cfg(windows)]
-    pub(crate) fn set_d3d11_texture2d_can_acquire(&self, can_acquire: bool) {
-        self.d3d11_texture_can_acquire.set(can_acquire);
-    }
-
-    #[cfg(windows)]
-    pub(crate) fn set_d3d11_texture2d_scanout(
-        &self,
-        s: Option<RdwD3d11Texture2dScanout>,
-    ) -> Result<(), String> {
-        use windows::Win32::Foundation::HANDLE;
-
-        let Some(s) = s else {
-            self.d3d11_scanout.replace(None);
-            self.d3d11_texture.replace(None);
-            return Ok(());
-        };
-
-        let d3d11_device = self
-            .d3d11_device
-            .get()
-            .ok_or("No d3d11 device initialized")?;
-        let egl_image_target =
-            egl::image_target_texture_2d_oes().ok_or("ImageTargetTexture2DOES support missing")?;
-
-        let egl_dpy = self
-            .egl_display()
-            .ok_or("Unsupported display kind (or not egl)")?;
-        let egl = egl::egl();
-
-        let d3d11_tex: ID3D11Texture2D = unsafe {
-            d3d11_device
-                .OpenSharedResource1(HANDLE(s.handle as _))
-                .map_err(|e| format!("Failed to open shared texture: {}", e))?
-        };
-
-        let tex: std::ptr::NonNull<std::ffi::c_void> =
-            unsafe { std::mem::transmute_copy(&d3d11_tex) };
-        let img = egl
-            .create_image(
-                egl_dpy,
-                egl::no_context(),
-                egl::D3D11_TEXTURE_ANGLE,
-                unsafe { egl::ClientBuffer::from_ptr(tex.as_ptr()) },
-                &[egl::NONE as _],
-            )
-            .map_err(|e| format!("eglCreateImage() failed: {}", e))?;
-
-        unsafe { gl::BindTexture(gl::TEXTURE_2D, self.texture_id()) };
-        egl_image_target(gl::TEXTURE_2D, img.as_ptr() as gl::types::GLeglImageOES);
-
-        egl.destroy_image(egl_dpy, img)
-            .map_err(|e| format!("eglDestroyImage() failed: {}", e))?;
-
-        self.d3d11_scanout.replace(Some(s));
-        self.d3d11_texture.replace(Some(d3d11_tex));
-        Ok(())
+            .and_then(|w| w.wl_surface().ok())
     }
 }

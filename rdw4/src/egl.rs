@@ -81,7 +81,7 @@ mod imp {
 
     pub(crate) fn display(ctxt: &gdk::GLContext) -> Option<khronos_egl::Display> {
         #[cfg(any(wayland, windows, x11))]
-        use glib::object::Cast;
+        use gtk::glib::object::Cast;
 
         let Some(_dpy) = ctxt.display() else {
             return None;

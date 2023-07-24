@@ -1,6 +1,4 @@
-use gtk::prelude::*;
-use gtk::subclass::prelude::*;
-use gtk::{cairo, gdk, glib, graphene};
+use gtk::{cairo, gdk, glib, graphene, prelude::*, subclass::prelude::*};
 
 mod imp;
 
@@ -40,7 +38,27 @@ impl Paintable {
         self.imp().update_area(x, y, w, h, stride, data)
     }
 
+    #[cfg(unix)]
     pub fn import_dmabuf(&self, s: &crate::RdwDmabufScanout) -> Result<(), glib::error::Error> {
         unsafe { self.imp().import_dmabuf(s) }
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn import_d3d11_texture2d_scanout(
+        &self,
+        s: Option<crate::RdwD3d11Texture2dScanout>,
+    ) -> Result<(), glib::error::Error> {
+        unsafe {
+            self.imp()
+                .win32
+                .import_d3d11_texture2d_scanout(self.imp(), s)
+        }
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn set_d3d11_texture2d_can_acquire(&self, can_acquire: bool) {
+        self.imp()
+            .win32
+            .set_d3d11_texture2d_can_acquire(can_acquire)
     }
 }

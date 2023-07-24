@@ -252,7 +252,7 @@ mod imp {
                         let _ = this.mouse_scroll(PtrFlags::HWHEEL, dx).await;
                         let _ = this.mouse_scroll(PtrFlags::WHEEL, dy).await;
                     }));
-                    glib::ControlFlow::Continue
+                    glib::Propagation::Proceed
                 }),
             );
             self.obj().add_controller(ec);

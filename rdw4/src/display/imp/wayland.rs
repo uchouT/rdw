@@ -1,5 +1,7 @@
-use std::cell::{Cell, RefCell};
-use std::os::unix::io::AsRawFd;
+use std::{
+    cell::{Cell, RefCell},
+    os::unix::io::AsRawFd,
+};
 
 use gdk_wl::wayland_client::{
     self, backend::Backend, globals::registry_queue_init, protocol::wl_registry, Connection,

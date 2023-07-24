@@ -1,6 +1,4 @@
-use gtk::prelude::*;
-use gtk::subclass::prelude::*;
-use gtk::{glib, graphene};
+use gtk::{glib, graphene, prelude::*, subclass::prelude::*};
 
 use crate::paintable::Paintable;
 

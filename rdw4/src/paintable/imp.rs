@@ -2,11 +2,18 @@ use std::cell::{Cell, OnceCell, RefCell};
 
 use super::*;
 
+#[cfg(windows)]
+mod win32;
+
 #[derive(Debug, Default)]
 pub struct Paintable {
     ctxt: OnceCell<gdk::GLContext>,
     texture: RefCell<Option<gdk::Texture>>,
     texture_id: Cell<Option<gl::types::GLuint>>,
+    use_rgb: Cell<bool>,
+
+    #[cfg(windows)]
+    pub(crate) win32: win32::Helper,
 }
 
 /// cbindgen:ignore
@@ -122,7 +129,9 @@ impl Paintable {
         ctxt.make_current();
 
         unsafe {
+            assert_eq!(gl::GetError(), gl::NO_ERROR);
             gl::BindTexture(gl::TEXTURE_2D, self.texture_id()?);
+            self.use_rgb.set(false);
             gl::TexImage2D(
                 gl::TEXTURE_2D,
                 0,
@@ -134,6 +143,20 @@ impl Paintable {
                 gl::UNSIGNED_BYTE,
                 std::ptr::null(),
             );
+            if gl::GetError() != gl::NO_ERROR {
+                gl::TexImage2D(
+                    gl::TEXTURE_2D,
+                    0,
+                    gl::RGB as _,
+                    w as _,
+                    h as _,
+                    0,
+                    gl::RGB,
+                    gl::UNSIGNED_BYTE,
+                    std::ptr::null(),
+                );
+                self.use_rgb.set(true);
+            }
             assert_eq!(gl::GetError(), gl::NO_ERROR);
         }
 
@@ -156,21 +179,51 @@ impl Paintable {
 
         // TODO: check data boundaries
         if let Some(data) = data {
+            #[cfg(windows)]
+            unsafe {
+                self.win32.import_d3d11_texture2d_scanout(self, None)?
+            };
+
             unsafe {
                 gl::BindTexture(gl::TEXTURE_2D, self.texture_id()?);
                 gl::PixelStorei(gl::UNPACK_ROW_LENGTH, stride / 4);
-                gl::TexSubImage2D(
-                    gl::TEXTURE_2D,
-                    0,
-                    x,
-                    y,
-                    w,
-                    h,
-                    gl::BGRA,
-                    gl::UNSIGNED_BYTE,
-                    data.as_ptr() as _,
-                );
+                if self.use_rgb.get() {
+                    let mut rgb = Vec::with_capacity(data.len());
+                    for pix in data.chunks(4) {
+                        rgb.push(pix[2]);
+                        rgb.push(pix[1]);
+                        rgb.push(pix[0]);
+                    }
+                    gl::TexSubImage2D(
+                        gl::TEXTURE_2D,
+                        0,
+                        x,
+                        y,
+                        w,
+                        h,
+                        gl::RGB,
+                        gl::UNSIGNED_BYTE,
+                        rgb.as_ptr() as _,
+                    );
+                } else {
+                    gl::TexSubImage2D(
+                        gl::TEXTURE_2D,
+                        0,
+                        x,
+                        y,
+                        w,
+                        h,
+                        gl::BGRA,
+                        gl::UNSIGNED_BYTE,
+                        data.as_ptr() as _,
+                    );
+                }
                 assert_eq!(gl::GetError(), gl::NO_ERROR);
+            }
+        } else {
+            #[cfg(windows)]
+            if self.win32.has_texture() {
+                self.win32.update_texture(self, x, y, w, h)?;
             }
         }
 
@@ -179,6 +232,7 @@ impl Paintable {
         Ok(())
     }
 
+    #[cfg(unix)]
     pub(crate) unsafe fn import_dmabuf(
         &self,
         s: &crate::RdwDmabufScanout,

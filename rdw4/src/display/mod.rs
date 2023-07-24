@@ -1,4 +1,3 @@
-#[cfg(unix)]
 use glib::{signal::SignalHandlerId, subclass::prelude::*, translate::*};
 use gtk::{gdk, glib, prelude::*, subclass::prelude::WidgetImpl};
 
@@ -321,11 +320,6 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
             {
                 log::warn!("Failed to update area: {}", e);
             }
-
-            #[cfg(unix)]
-            imp.dmabuf.replace(None);
-            #[cfg(windows)]
-            imp.d3d11_scanout.replace(None);
         }
     }
 
@@ -341,10 +335,10 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
         }
         #[cfg(not(feature = "bindings"))]
         {
-            let imp = imp::Display::from_obj(self_);
+            let imp = self_.imp();
 
-            if let Err(e) = imp.set_d3d11_texture2d_scanout(s) {
-                log::warn!("Failed to set D3D scanout: {}", e);
+            if let Err(e) = imp.picture.paintable().import_d3d11_texture2d_scanout(s) {
+                log::warn!("Failed to import D3D scanout: {}", e);
             }
         }
     }
@@ -362,7 +356,9 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
         {
             let imp = imp::Display::from_obj(self_);
 
-            imp.set_d3d11_texture2d_can_acquire(can_acquire);
+            imp.picture
+                .paintable()
+                .set_d3d11_texture2d_can_acquire(can_acquire);
         }
     }
 

@@ -10,6 +10,7 @@ endif
 ifdef MINGW_PREFIX
 export MSYS2_ARG_CONV_EXCL=*
 export PREFIX=$(MINGW_PREFIX)
+export CARGO_FLAGS:=--no-default-features $(CARGO_FLAGS)
 else
 export PREFIX=/usr
 endif
