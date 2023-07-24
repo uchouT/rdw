@@ -39,7 +39,7 @@ x11 = { version = "2.18", optional = true }
 [dependencies.gtk]
 package = "gtk4"
 features = ["unsafe-assume-initialized", "v4_12"]
-version = "0.7"
+version = "0.8"
 git = "https://github.com/gtk-rs/gtk4-rs"
 
 [dependencies.gst]
@@ -63,14 +63,14 @@ git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs.git"
 package = "gdk4-wayland"
 features = ["v4_4", "egl", "wayland_crate"]
 optional = true
-version = "0.7"
+version = "0.8"
 git = "https://github.com/gtk-rs/gtk4-rs"
 
 [dependencies.gdk-x11]
 package = "gdk4-x11"
 features = ["v4_4", "egl"]
 optional = true
-version = "0.7"
+version = "0.8"
 git = "https://github.com/gtk-rs/gtk4-rs"
 
 [target.'cfg(windows)'.dependencies]
@@ -90,7 +90,7 @@ windows = { version = "0.44.0", features = [
 [target.'cfg(windows)'.dependencies.gdk-win32]
 package = "gdk4-win32"
 features = ["v4_4", "win32", "egl"]
-version = "0.7"
+version = "0.8"
 git = "https://github.com/gtk-rs/gtk4-rs"
 
 [package.metadata.capi.header]
