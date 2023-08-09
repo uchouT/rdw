@@ -46,6 +46,7 @@ pub struct Display {
 
     // the shortcut to ungrab key/mouse (to be configurable and extended with ctrl-alt)
     pub(crate) grab_shortcut: OnceCell<gtk::ShortcutTrigger>,
+    pub(crate) delayed_grab_shortcut: Cell<bool>,
     pub(crate) grabbed: Cell<Grab>,
     pub(crate) shortcuts_inhibited_id: Cell<Option<glib::SignalHandlerId>>,
 
@@ -100,6 +101,7 @@ impl ObjectImpl for Display {
 
         let ec = gtk::EventControllerFocus::new();
         ec.connect_leave(clone!(@weak self as this => @default-panic, move |_ec| {
+            this.delayed_grab_shortcut.set(false);
             this.release_keys();
         }));
         self.obj().add_controller(ec);
@@ -113,8 +115,8 @@ impl ObjectImpl for Display {
             }),
         );
         ec.connect_key_released(
-            clone!(@weak self as this => @default-panic, move |_ec, keyval, keycode, _state| {
-                this.key_released(keyval, keycode);
+            clone!(@weak self as this => @default-panic, move |ec, keyval, keycode, _state| {
+                this.key_released(ec, keyval, keycode);
             }),
         );
         self.obj().add_controller(ec);
@@ -127,8 +129,8 @@ impl ObjectImpl for Display {
             this.do_motion(x, y)
         }));
         ec.connect_leave(clone!(@weak self as this => move |_| {
-            log::debug!("leave -> ungrab");
-            this.ungrab();
+            log::debug!("leave -> ungrab mouse");
+            this.ungrab_mouse();
         }));
         self.picture.add_controller(ec);
 
@@ -661,13 +663,10 @@ impl Display {
     }
 
     fn key_pressed(&self, ec: &gtk::EventControllerKey, keyval: gdk::Key, keycode: u32) {
+        self.delayed_grab_shortcut.set(false);
         if let Some(ref e) = ec.current_event() {
             if self.grab_shortcut.get().unwrap().trigger(e, false) == gdk::KeyMatch::Exact {
-                if self.grabbed.get().is_empty() {
-                    self.try_grab();
-                } else {
-                    self.ungrab();
-                }
+                self.delayed_grab_shortcut.set(true);
             }
         }
 
@@ -686,11 +685,23 @@ impl Display {
                 )));
     }
 
-    fn key_released(&self, keyval: gdk::Key, keycode: u32) {
+    fn key_released(&self, _ec: &gtk::EventControllerKey, keyval: gdk::Key, keycode: u32) {
+        // FIXME: it also receives release events for keys that didn't get press events...
+        // ex: ctrl-alt-down
+        if self.delayed_grab_shortcut.take() {
+            if self.grabbed.get().is_empty() {
+                self.try_grab();
+            } else {
+                self.ungrab();
+            }
+        }
+
+        let mut emitted = false;
         if let Some((last_keyval, last_keycode)) = self.last_key_press.get() {
             if (last_keyval, last_keycode) == (keyval, keycode) {
                 self.clear_last_key_press();
                 self.do_key_press_and_release(keyval, keycode);
+                emitted = true;
             }
         }
 
@@ -698,7 +709,9 @@ impl Display {
         self.emit_last_key_press();
 
         self.keys_pressed.borrow_mut().remove(&(keyval, keycode));
-        self.do_key_release(keyval, keycode)
+        if !emitted {
+            self.do_key_release(keyval, keycode)
+        }
     }
 
     fn try_grab_keyboard(&self) -> bool {
