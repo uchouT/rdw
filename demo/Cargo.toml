@@ -5,13 +5,21 @@ authors = ["Marc-André Lureau <marcandre.lureau@redhat.com>"]
 edition = "2021"
 
 [features]
+default = ["wayland", "x11"]
 bindings = ["rdw/bindings", "rdw-rdp/bindings", "rdw-spice/bindings", "rdw-vnc/bindings"]
+wayland = ["rdw/wayland"]
+x11 = ["rdw/x11"]
 
 [dependencies]
 log = "0.4"
 env_logger = { version = "0.9", default-features = false }
-adw = { package = "libadwaita", version = "0.4", features = ["v1_3"] }
 rdw = { package = "rdw4", path = "../rdw4", default-features = false }
 rdw-rdp = { package = "rdw4-rdp", path = "../rdw4-rdp", default-features = false }
 rdw-spice = { package = "rdw4-spice", path = "../rdw4-spice", default-features = false }
 rdw-vnc = { package = "rdw4-vnc", path = "../rdw4-vnc", default-features = false }
+
+[dependencies.adw]
+package = "libadwaita"
+features = ["v1_3"]
+version = "0.6"
+git = "https://gitlab.gnome.org/World/Rust/libadwaita-rs"

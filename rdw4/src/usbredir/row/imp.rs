@@ -71,7 +71,7 @@ impl ObjectImpl for Row {
             clone!(@weak self as this => @default-panic, move |_s, state| {
                 let device = this.obj().device();
                 device.emit_by_name::<()>("state-set", &[&state]);
-                gtk::Inhibit(true)
+                glib::Propagation::Stop
             }),
         );
     }

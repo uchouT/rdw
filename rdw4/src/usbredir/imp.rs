@@ -127,7 +127,7 @@ pub struct UsbRedir {
 impl Default for UsbRedir {
     fn default() -> Self {
         Self {
-            model: gio::ListStore::new(device::Device::static_type()),
+            model: gio::ListStore::new::<device::Device>(),
             listbox: TemplateChild::default(),
             infobar_revealer: TemplateChild::default(),
             infobar_close: TemplateChild::default(),
@@ -212,12 +212,12 @@ impl WidgetImpl for UsbRedir {
         if let Some((ctxt, rx)) = RdwUsbContext::new() {
             let _id = rx.attach(
                 None,
-                clone!(@weak self as this => @default-return glib::Continue(false), move |ev| {
+                clone!(@weak self as this => @default-return glib::ControlFlow::Break, move |ev| {
                     match ev {
                         RdwUsbEvent::DeviceArrived(d) => this.add_device(d),
                         RdwUsbEvent::DeviceLeft(d) => this.remove_device(d),
                     }
-                    glib::Continue(true)
+                    glib::ControlFlow::Continue
                 }),
             );
             self.ctxt.replace(Some(ctxt));

@@ -10,6 +10,7 @@ endif
 ifdef MINGW_PREFIX
 export MSYS2_ARG_CONV_EXCL=*
 export PREFIX=$(MINGW_PREFIX)
+export CARGO_FLAGS:=--no-default-features $(CARGO_FLAGS)
 else
 export PREFIX=/usr
 endif
@@ -35,12 +36,10 @@ $(GIR): $(HEADER)
 		--namespace Rdw --nsversion=4.0 \
 		--identifier-prefix Rdw \
 		--c-include "rdw.h" \
-		-I$(PREFIX)/include \
 		-Iinst/$(PREFIX)/include \
-		-L$(PREFIX)/$(LIB) \
 		-Linst/$(PREFIX)/$(LIB) \
-		--library=rdw4 \
 		--include=Gtk-4.0 --pkg gtk4 \
+		--library=rdw4 \
 		--output $@ \
 		$<
 

@@ -141,16 +141,12 @@ pub extern "C" fn rdw_display_update_area(
     data: *const u8,
 ) {
     let this: &Display = unsafe { &from_glib_borrow(dpy) };
-    let data = unsafe { std::slice::from_raw_parts(data, (h * stride) as _) };
+    let data = if data.is_null() {
+        None
+    } else {
+        Some(unsafe { std::slice::from_raw_parts(data, (h * stride) as _) })
+    };
     this.update_area(x, y, w, h, stride, data);
-}
-
-/// rdw_display_render:
-/// @dpy: A #RdwDisplay
-#[no_mangle]
-pub extern "C" fn rdw_display_render(dpy: *mut RdwDisplay) {
-    let this: &Display = unsafe { &from_glib_borrow(dpy) };
-    this.render();
 }
 
 /// rdw_display_set_dmabuf_scanout:

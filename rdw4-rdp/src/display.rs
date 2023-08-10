@@ -252,7 +252,7 @@ mod imp {
                         let _ = this.mouse_scroll(PtrFlags::HWHEEL, dx).await;
                         let _ = this.mouse_scroll(PtrFlags::WHEEL, dy).await;
                     }));
-                    glib::signal::Inhibit(false)
+                    glib::Propagation::Proceed
                 }),
             );
             self.obj().add_controller(ec);
@@ -304,7 +304,7 @@ mod imp {
                 RdpEvent::Authenticate { .. } => {
                     self.state.replace(Some(e));
                     glib::idle_add_local(
-                        glib::clone!(@weak self as this => @default-return Continue(false), move || {
+                        glib::clone!(@weak self as this => @default-return glib::ControlFlow::Break, move || {
                             let res = this.obj().emit_by_name::<bool>("rdp-authenticate", &[]);
                             match this.state.take().unwrap() {
                                 RdpEvent::Authenticate { settings, tx } => {
@@ -318,7 +318,7 @@ mod imp {
                                     panic!()
                                 }
                             }
-                            Continue(false)
+                            glib::ControlFlow::Break
                         }),
                     );
                 }
@@ -341,7 +341,7 @@ mod imp {
                             w as _,
                             h as _,
                             stride as _,
-                            &buffer[start..end],
+                            Some(&buffer[start..end]),
                         );
                     }
                 }

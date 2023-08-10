@@ -53,4 +53,8 @@ fn main() {
             .unwrap()
             .write_to_file(out_include.join(format!("{}.h", name)));
     }
+
+    if cfg!(feature = "bindings") {
+        system_deps::Config::new().probe().unwrap();
+    }
 }

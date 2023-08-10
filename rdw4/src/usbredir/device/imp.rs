@@ -107,7 +107,7 @@ fn device_manufacturer_product(
 
 #[cfg(not(unix))]
 fn device_manufacturer_product(
-    device: &rusb::Device<rusb::Context>,
+    _device: &rusb::Device<rusb::Context>,
 ) -> std::io::Result<(String, String)> {
     Err(std::io::Error::new(
         std::io::ErrorKind::Other,

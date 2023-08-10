@@ -149,11 +149,10 @@ mod imp {
             let session = &self.session;
 
             session.connect_channel_new(clone!(@weak self as this => move |_session, channel| {
-                use spice::ChannelType::*;
+                use spice::ChannelType::{self, *};
 
-                let type_ = match spice::ChannelType::try_from(channel.channel_type()) {
-                    Ok(t) => t,
-                    _ => return,
+                let Ok(type_) = ChannelType::try_from(channel.channel_type()) else {
+                    return;
                 };
 
                 match type_ {
@@ -328,7 +327,7 @@ mod imp {
 
                         dpy.connect_gl_draw(clone!(@weak this => move |dpy, x, y, w, h| {
                             log::debug!("gl-draw: {:?}", (x, y, w, h));
-                            this.obj().render();
+                            this.obj().update_area(x as _, y as _, w as _, h as _, 0, None);
                             dpy.gl_draw_done();
                         }));
 
@@ -562,7 +561,7 @@ mod imp {
                         w as _,
                         h as _,
                         stride as _,
-                        &buf[start..end],
+                        Some(&buf[start..end]),
                     );
                 }
                 _ => {
