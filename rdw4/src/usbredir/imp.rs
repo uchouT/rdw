@@ -1,4 +1,8 @@
 use super::*;
+use futures::{
+    channel::mpsc::{self, Receiver, Sender},
+    StreamExt,
+};
 use glib::{clone, subclass::Signal, ParamSpec};
 use gtk::CompositeTemplate;
 use once_cell::sync::Lazy;
@@ -17,16 +21,16 @@ enum RdwUsbEvent<T: UsbContext> {
 
 #[derive(Debug)]
 struct RdwUsbHandler<T: UsbContext> {
-    pub tx: glib::Sender<RdwUsbEvent<T>>,
+    pub tx: Sender<RdwUsbEvent<T>>,
 }
 
 impl<T: UsbContext> rusb::Hotplug<T> for RdwUsbHandler<T> {
     fn device_arrived(&mut self, device: rusb::Device<T>) {
-        let _ = self.tx.send(RdwUsbEvent::DeviceArrived(device));
+        let _ = self.tx.try_send(RdwUsbEvent::DeviceArrived(device));
     }
 
     fn device_left(&mut self, device: rusb::Device<T>) {
-        let _ = self.tx.send(RdwUsbEvent::DeviceLeft(device));
+        let _ = self.tx.try_send(RdwUsbEvent::DeviceLeft(device));
     }
 }
 
@@ -39,7 +43,7 @@ struct RdwUsbContext {
 }
 
 impl RdwUsbContext {
-    fn new() -> Option<(Self, glib::Receiver<RdwUsbEvent<rusb::Context>>)> {
+    fn new() -> Option<(Self, Receiver<RdwUsbEvent<rusb::Context>>)> {
         let ctxt = match rusb::Context::new() {
             Ok(ctxt) => ctxt,
             Err(e) => {
@@ -48,7 +52,7 @@ impl RdwUsbContext {
             }
         };
 
-        let (tx, rx) = glib::MainContext::channel(glib::source::Priority::default());
+        let (tx, rx) = mpsc::channel(1);
         let reg = match rusb::HotplugBuilder::new()
             .enumerate(true)
             .register(&ctxt, Box::new(RdwUsbHandler { tx }))
@@ -209,17 +213,17 @@ impl WidgetImpl for UsbRedir {
     fn realize(&self) {
         self.parent_realize();
 
-        if let Some((ctxt, rx)) = RdwUsbContext::new() {
-            let _id = rx.attach(
-                None,
-                clone!(@weak self as this => @default-return glib::ControlFlow::Break, move |ev| {
-                    match ev {
-                        RdwUsbEvent::DeviceArrived(d) => this.add_device(d),
-                        RdwUsbEvent::DeviceLeft(d) => this.remove_device(d),
+        if let Some((ctxt, mut rx)) = RdwUsbContext::new() {
+            let c = glib::MainContext::default();
+            c.spawn_local(clone!(@weak self as this => async move {
+                loop {
+                    match rx.next().await {
+                        Some(RdwUsbEvent::DeviceArrived(d)) => this.add_device(d),
+                        Some(RdwUsbEvent::DeviceLeft(d)) => this.remove_device(d),
+                        None => break,
                     }
-                    glib::ControlFlow::Continue
-                }),
-            );
+                }
+            }));
             self.ctxt.replace(Some(ctxt));
         }
 

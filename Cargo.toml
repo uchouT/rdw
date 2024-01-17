@@ -11,5 +11,5 @@ members = [
 exclude = [
     "cbindgen",
 ]
-
+resolver = "2"
 default-members = ["demo"]

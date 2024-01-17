@@ -1,4 +1,5 @@
 use super::*;
+use crate::display::DisplayExt;
 use crate::picture::Picture;
 use glib::{clone, subclass::Signal, SourceId};
 use gtk::{graphene, subclass::prelude::*};
@@ -380,7 +381,7 @@ impl WidgetImpl for Display {
                     let height = height as u32 * sf;
                     let (w_mm, h_mm) = this.surface()
                                    .as_ref()
-                                   .and_then(|s| gdk::traits::DisplayExt::monitor_at_surface(&this.obj().display(), s))
+                                   .and_then(|s| gdk::prelude::DisplayExt::monitor_at_surface(&this.obj().display(), s))
                                    .map(|m| {
                                        let (geom, wmm, hmm) = (m.geometry(), m.width_mm() as u32, m.height_mm() as u32);
                                        (wmm * width / (geom.width() as u32), hmm * height / geom.height() as u32)
@@ -763,7 +764,7 @@ impl Display {
             return true;
         }
 
-        if let Some(default_seat) = gdk::traits::DisplayExt::default_seat(&self.obj().display()) {
+        if let Some(default_seat) = gdk::prelude::DisplayExt::default_seat(&self.obj().display()) {
             for device in default_seat.devices(gdk::SeatCapabilities::POINTER) {
                 if !self.try_grab_device(device) {
                     return false;

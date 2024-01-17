@@ -444,10 +444,10 @@ mod imp {
             let obj = self.obj();
 
             match selection {
-                0 => Some(gdk::traits::DisplayExt::clipboard(
+                0 => Some(gdk::prelude::DisplayExt::clipboard(
                     &obj.upcast_ref::<gtk::Widget>().display(),
                 )),
-                1 => Some(gdk::traits::DisplayExt::primary_clipboard(
+                1 => Some(gdk::prelude::DisplayExt::primary_clipboard(
                     &obj.upcast_ref::<gtk::Widget>().display(),
                 )),
                 _ => {

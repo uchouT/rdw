@@ -257,7 +257,7 @@ mod imp {
             );
             self.obj().add_controller(ec);
 
-            let cb = gdk::traits::DisplayExt::clipboard(&self.obj().display());
+            let cb = gdk::prelude::DisplayExt::clipboard(&self.obj().display());
             let watch_id = cb.connect_changed(clone!(@weak self as this => move |clipboard| {
                 let is_local = clipboard.is_local();
                 if let (false, formats) = (is_local, clipboard.formats()) {
@@ -388,7 +388,7 @@ mod imp {
                     if self.obj().read_only() {
                         return;
                     }
-                    let cb = gdk::traits::DisplayExt::clipboard(&self.obj().display());
+                    let cb = gdk::prelude::DisplayExt::clipboard(&self.obj().display());
                     let content = rdw::ContentProvider::new(
                         &formats,
                         clone!(@weak self as this => @default-return None, move |mime, stream, prio| {
@@ -427,7 +427,7 @@ mod imp {
                         let mut data = None;
 
                         if let Some(mime) = mime_from_format(format) {
-                            let cb = gdk::traits::DisplayExt::clipboard(&this.obj().display());
+                            let cb = gdk::prelude::DisplayExt::clipboard(&this.obj().display());
                             let res = cb.read_future(&[mime], glib::Priority::default()).await;
                             log::debug!("clipboard-read: {:?}", res);
                             if let Ok((stream, _)) = res {

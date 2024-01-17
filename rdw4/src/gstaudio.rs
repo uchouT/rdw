@@ -12,7 +12,7 @@ struct GstAudioOut {
 impl GstAudioOut {
     fn new(caps: &str) -> Result<Self, Box<dyn Error>> {
         let pipeline = &format!("appsrc name=src is-live=1 do-timestamp=0 format=time caps=\"{}\" ! queue ! audioconvert ! audioresample ! autoaudiosink name=sink", caps);
-        let pipeline = gst::parse_launch(pipeline)?;
+        let pipeline = gst::parse::launch(pipeline)?;
         let pipeline = pipeline.dynamic_cast::<gst::Pipeline>().unwrap();
         let src = pipeline
             .by_name("src")
@@ -33,7 +33,7 @@ struct GstAudioIn {
 impl GstAudioIn {
     fn new(caps: &str) -> Result<Self, Box<dyn Error>> {
         let pipeline = &format!("autoaudiosrc name=src ! queue ! audioconvert ! audioresample ! appsink caps=\"{}\" name=sink", caps);
-        let pipeline = gst::parse_launch(pipeline)?;
+        let pipeline = gst::parse::launch(pipeline)?;
         let pipeline = pipeline.dynamic_cast::<gst::Pipeline>().unwrap();
         let sink = pipeline
             .by_name("sink")
