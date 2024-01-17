@@ -12,9 +12,9 @@ qmp = ["qemu-display/qmp"]
 log = "0.4"
 pretty_env_logger = "0.4"
 once_cell = "1.5"
-zbus = { version = "4" }
-qemu-display = { path = "../qemu-display" }
-keycodemap = { path = "../keycodemap" }
+zbus.workspace = true
+qemu-display.workspace = true
+keycodemap.workspace = true
 futures-util = "0.3"
 futures = "0.3"
 async-trait = "0.1"
