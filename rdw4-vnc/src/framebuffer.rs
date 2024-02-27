@@ -8,7 +8,7 @@ use gvnc::{prelude::*, subclass::base_framebuffer::*};
 /// cbindgen::ignore
 mod imp {
     use super::*;
-    use once_cell::sync::OnceCell;
+    use std::cell::OnceCell;
 
     #[derive(Debug, Default)]
     pub(crate) struct Framebuffer {

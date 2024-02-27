@@ -72,7 +72,10 @@ impl Display {
         let Some(node) = snap.to_node() else {
             return None;
         };
-        let texture = native.renderer().render_texture(node, None);
+        let Some(renderer) = native.renderer() else {
+            return None;
+        };
+        let texture = renderer.render_texture(node, None);
         let mut down = gdk::TextureDownloader::new(&texture);
         down.set_format(gdk::MemoryFormat::R8g8b8a8);
         let (bytes, stride) = down.download_bytes();
@@ -263,7 +266,7 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
     }
 
     fn set_mouse_absolute(&self, absolute: bool) {
-        glib::ObjectExt::set_property(self, "mouse-absolute", absolute);
+        self.set_property("mouse-absolute", absolute)
     }
 
     fn set_cursor_position(&self, pos: Option<(i32, i32)>) {

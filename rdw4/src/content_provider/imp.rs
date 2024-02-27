@@ -1,5 +1,6 @@
+use std::cell::OnceCell;
+
 use gtk::subclass::prelude::*;
-use once_cell::sync::OnceCell;
 
 use super::*;
 

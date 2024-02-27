@@ -3,10 +3,10 @@ use crate::display::DisplayExt;
 use crate::picture::Picture;
 use glib::{clone, subclass::Signal, SourceId};
 use gtk::{graphene, subclass::prelude::*};
-use once_cell::sync::{Lazy, OnceCell};
 use std::{
-    cell::{Cell, RefCell},
+    cell::{Cell, OnceCell, RefCell},
     collections::HashSet,
+    sync::OnceLock,
     time::Duration,
 };
 
@@ -195,54 +195,56 @@ impl ObjectImpl for Display {
     }
 
     fn properties() -> &'static [glib::ParamSpec] {
-        static PROPERTIES: Lazy<Vec<glib::ParamSpec>> = Lazy::new(|| {
-            vec![
-                glib::ParamSpecObject::builder::<gtk::ShortcutTrigger>("grab-shortcut")
-                    .nick("Grab shortcut")
-                    .blurb("Input devices grab/ungrab shortcut")
-                    .build(),
-                glib::ParamSpecFlags::builder::<Grab>("grabbed")
-                    .nick("grabbed")
-                    .blurb("Grabbed")
-                    .read_only()
-                    .explicit_notify()
-                    .default_value(Grab::empty())
-                    .build(),
-                glib::ParamSpecUInt::builder("synthesize-delay")
-                    .nick("Synthesize delay")
-                    .blurb("Press-and-release synthesize maximum time in ms")
-                    .default_value(100)
-                    .construct()
-                    .build(),
-                glib::ParamSpecBoolean::builder("mouse-absolute")
-                    .nick("Mouse absolute")
-                    .blurb("Whether the mouse is absolute or relative")
-                    .construct()
-                    .build(),
-                glib::ParamSpecBoolean::builder("read-only")
-                    .nick("Read-only")
-                    .blurb("Do no send input events")
-                    .explicit_notify()
-                    .default_value(false)
-                    .construct()
-                    .build(),
-                glib::ParamSpecBoolean::builder("show-local-cursor")
-                    .nick("Show local cursor")
-                    .blurb("Show local cursor")
-                    .explicit_notify()
-                    .default_value(false)
-                    .construct()
-                    .build(),
-                glib::ParamSpecBoolean::builder("scaling")
-                    .nick("Scaling")
-                    .blurb("Scale display")
-                    .explicit_notify()
-                    .default_value(true)
-                    .construct()
-                    .build(),
-            ]
-        });
-        PROPERTIES.as_ref()
+        static PROPERTIES: OnceLock<Vec<glib::ParamSpec>> = OnceLock::new();
+        PROPERTIES
+            .get_or_init(|| {
+                vec![
+                    glib::ParamSpecObject::builder::<gtk::ShortcutTrigger>("grab-shortcut")
+                        .nick("Grab shortcut")
+                        .blurb("Input devices grab/ungrab shortcut")
+                        .build(),
+                    glib::ParamSpecFlags::builder::<Grab>("grabbed")
+                        .nick("grabbed")
+                        .blurb("Grabbed")
+                        .read_only()
+                        .explicit_notify()
+                        .default_value(Grab::empty())
+                        .build(),
+                    glib::ParamSpecUInt::builder("synthesize-delay")
+                        .nick("Synthesize delay")
+                        .blurb("Press-and-release synthesize maximum time in ms")
+                        .default_value(100)
+                        .construct()
+                        .build(),
+                    glib::ParamSpecBoolean::builder("mouse-absolute")
+                        .nick("Mouse absolute")
+                        .blurb("Whether the mouse is absolute or relative")
+                        .construct()
+                        .build(),
+                    glib::ParamSpecBoolean::builder("read-only")
+                        .nick("Read-only")
+                        .blurb("Do no send input events")
+                        .explicit_notify()
+                        .default_value(false)
+                        .construct()
+                        .build(),
+                    glib::ParamSpecBoolean::builder("show-local-cursor")
+                        .nick("Show local cursor")
+                        .blurb("Show local cursor")
+                        .explicit_notify()
+                        .default_value(false)
+                        .construct()
+                        .build(),
+                    glib::ParamSpecBoolean::builder("scaling")
+                        .nick("Scaling")
+                        .blurb("Scale display")
+                        .explicit_notify()
+                        .default_value(true)
+                        .construct()
+                        .build(),
+                ]
+            })
+            .as_ref()
     }
 
     fn set_property(&self, _id: usize, value: &glib::Value, pspec: &glib::ParamSpec) {
@@ -294,41 +296,43 @@ impl ObjectImpl for Display {
     }
 
     fn signals() -> &'static [Signal] {
-        static SIGNALS: Lazy<Vec<Signal>> = Lazy::new(|| {
-            vec![
-                Signal::builder("key-event")
-                    .param_types([
-                        u32::static_type(),
-                        u32::static_type(),
-                        KeyEvent::static_type(),
-                    ])
-                    .build(),
-                Signal::builder("motion")
-                    .param_types([f64::static_type(), f64::static_type()])
-                    .build(),
-                Signal::builder("motion-relative")
-                    .param_types([f64::static_type(), f64::static_type()])
-                    .build(),
-                Signal::builder("mouse-press")
-                    .param_types([u32::static_type()])
-                    .build(),
-                Signal::builder("mouse-release")
-                    .param_types([u32::static_type()])
-                    .build(),
-                Signal::builder("scroll-discrete")
-                    .param_types([Scroll::static_type()])
-                    .build(),
-                Signal::builder("resize-request")
-                    .param_types([
-                        u32::static_type(),
-                        u32::static_type(),
-                        u32::static_type(),
-                        u32::static_type(),
-                    ])
-                    .build(),
-            ]
-        });
-        SIGNALS.as_ref()
+        static SIGNALS: OnceLock<Vec<Signal>> = OnceLock::new();
+        SIGNALS
+            .get_or_init(|| {
+                vec![
+                    Signal::builder("key-event")
+                        .param_types([
+                            u32::static_type(),
+                            u32::static_type(),
+                            KeyEvent::static_type(),
+                        ])
+                        .build(),
+                    Signal::builder("motion")
+                        .param_types([f64::static_type(), f64::static_type()])
+                        .build(),
+                    Signal::builder("motion-relative")
+                        .param_types([f64::static_type(), f64::static_type()])
+                        .build(),
+                    Signal::builder("mouse-press")
+                        .param_types([u32::static_type()])
+                        .build(),
+                    Signal::builder("mouse-release")
+                        .param_types([u32::static_type()])
+                        .build(),
+                    Signal::builder("scroll-discrete")
+                        .param_types([Scroll::static_type()])
+                        .build(),
+                    Signal::builder("resize-request")
+                        .param_types([
+                            u32::static_type(),
+                            u32::static_type(),
+                            u32::static_type(),
+                            u32::static_type(),
+                        ])
+                        .build(),
+                ]
+            })
+            .as_ref()
     }
 }
 
@@ -820,11 +824,12 @@ impl Display {
             .root()
             .and_then(|r| r.native())
             .map(|n| n.surface())
+            .flatten()
             .and_then(|s| s.downcast::<gdk::Toplevel>().ok())
     }
 
     fn surface(&self) -> Option<gdk::Surface> {
-        self.obj().native().map(|n| n.surface())
+        self.obj().native().map(|n| n.surface()).flatten()
     }
 
     #[cfg(windows)]

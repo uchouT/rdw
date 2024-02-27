@@ -1,7 +1,6 @@
 use gl::types::{GLint, GLuint};
 use gtk::glib;
-use once_cell::sync::OnceCell;
-use std::cell::{Cell, RefCell};
+use std::cell::{Cell, OnceCell, RefCell};
 use windows::Win32::{
     Foundation::HANDLE,
     Graphics::{

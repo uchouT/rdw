@@ -1,6 +1,6 @@
 use glib::{clone, ParamSpec};
 use gtk::{glib, prelude::*, subclass::prelude::*, CompositeTemplate};
-use once_cell::sync::OnceCell;
+use std::cell::OnceCell;
 
 #[derive(Debug, Default, glib::Properties, CompositeTemplate)]
 #[template(file = "row.ui")]

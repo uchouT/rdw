@@ -41,13 +41,12 @@ mod imp {
     use futures::channel::{mpsc::UnboundedReceiver, oneshot};
     use glib::subclass::Signal;
     use gtk::subclass::prelude::*;
-    use once_cell::sync::Lazy;
     use rdw::gtk::{gdk, gio, glib::MainContext};
     use std::{
         cell::{Cell, RefCell},
         sync::{
             mpsc::{Receiver, Sender},
-            Arc, Mutex,
+            Arc, Mutex, OnceLock,
         },
     };
 
@@ -162,12 +161,14 @@ mod imp {
         }
 
         fn signals() -> &'static [Signal] {
-            static SIGNALS: Lazy<Vec<Signal>> = Lazy::new(|| {
-                vec![Signal::builder("rdp-authenticate")
-                    .return_type_from(<bool>::static_type())
-                    .build()]
-            });
-            SIGNALS.as_ref()
+            static SIGNALS: OnceLock<Vec<Signal>> = OnceLock::new();
+            SIGNALS
+                .get_or_init(|| {
+                    vec![Signal::builder("rdp-authenticate")
+                        .return_type_from(<bool>::static_type())
+                        .build()]
+                })
+                .as_ref()
         }
 
         fn constructed(&self) {

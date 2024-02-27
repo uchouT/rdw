@@ -1,10 +1,11 @@
-use bitflags::bitflags;
+use glib::bitflags::bitflags;
 
 use gtk::glib::{
     self,
     translate::{from_glib, FromGlib, IntoGlib, ToGlibPtr, ToGlibPtrMut},
+    types::StaticType,
     value::*,
-    StaticType, Type,
+    Type,
 };
 
 use crate::ffi;
@@ -85,6 +86,7 @@ impl ToValue for Scroll {
 }
 
 bitflags! {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
     #[repr(transparent)]
     pub struct Grab: u32 {
         const MOUSE = ffi::RDW_GRAB_MOUSE;
@@ -150,6 +152,7 @@ impl std::default::Default for Grab {
 }
 
 bitflags! {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
     #[repr(transparent)]
     pub struct KeyEvent: u32 {
         const PRESS = ffi::RDW_KEY_EVENT_PRESS;

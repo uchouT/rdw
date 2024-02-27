@@ -27,8 +27,6 @@ extern "C" {
         data: *const u8,
     );
 
-    pub fn rdw_display_render(dpy: *mut RdwDisplay);
-
     #[cfg(unix)]
     pub fn rdw_display_set_dmabuf_scanout(dpy: *mut RdwDisplay, dmabuf: *const RdwDmabufScanout);
 

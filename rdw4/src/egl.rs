@@ -5,6 +5,7 @@ use std::os::unix::prelude::RawFd;
 #[cfg(windows)]
 use std::os::windows::raw::HANDLE;
 
+#[cfg(not(feature = "bindings"))]
 pub use khronos_egl::*;
 
 #[cfg(not(feature = "bindings"))]
@@ -12,13 +13,12 @@ mod imp {
     use super::*;
     use gdk::prelude::GLContextExt;
     use gtk::gdk;
-    use once_cell::sync::OnceCell;
-    use std::ffi::c_void;
+    use std::{ffi::c_void, sync::OnceLock};
 
     type EglInstance = khronos_egl::Instance<khronos_egl::Static>;
 
     pub(crate) fn egl() -> &'static EglInstance {
-        static INSTANCE: OnceCell<EglInstance> = OnceCell::new();
+        static INSTANCE: OnceLock<EglInstance> = OnceLock::new();
         INSTANCE.get_or_init(|| khronos_egl::Instance::new(khronos_egl::Static))
     }
 

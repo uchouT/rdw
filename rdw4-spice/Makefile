@@ -1,4 +1,4 @@
-CARGO_FLAGS ?= --release
+CARGO_FLAGS ?= --release --no-default-features
 
 MACHINE := $(shell getconf LONG_BIT)
 ifeq ($(MACHINE), 64)

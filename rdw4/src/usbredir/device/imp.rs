@@ -1,8 +1,10 @@
-use std::cell::{Cell, RefCell};
+use std::{
+    cell::{Cell, RefCell},
+    sync::OnceLock,
+};
 
 use glib::{subclass::Signal, ParamSpec};
 use gtk::{glib, prelude::*, subclass::prelude::*};
-use once_cell::sync::Lazy;
 use usbredirhost::rusb;
 
 #[derive(Default, glib::Properties)]
@@ -35,12 +37,14 @@ impl ObjectImpl for Device {
     }
 
     fn signals() -> &'static [Signal] {
-        static SIGNALS: Lazy<Vec<Signal>> = Lazy::new(|| {
-            vec![Signal::builder("state-set")
-                .param_types([bool::static_type()])
-                .build()]
-        });
-        SIGNALS.as_ref()
+        static SIGNALS: OnceLock<Vec<Signal>> = OnceLock::new();
+        SIGNALS
+            .get_or_init(|| {
+                vec![Signal::builder("state-set")
+                    .param_types([bool::static_type()])
+                    .build()]
+            })
+            .as_ref()
     }
 }
 

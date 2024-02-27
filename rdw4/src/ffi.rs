@@ -4,7 +4,7 @@ use gtk::glib;
 
 #[cfg(not(feature = "bindings"))]
 mod pure {
-    use super::glib::{self, flags, translate::IntoGlib, Enum, StaticType};
+    use super::glib::{self, flags, translate::IntoGlib, types::StaticType, Enum};
 
     #[derive(Debug, Eq, PartialEq, Clone, Copy, Enum)]
     #[enum_type(name = "RdwScroll")]

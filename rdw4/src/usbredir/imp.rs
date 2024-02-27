@@ -5,10 +5,10 @@ use futures::{
 };
 use glib::{clone, subclass::Signal, ParamSpec};
 use gtk::CompositeTemplate;
-use once_cell::sync::Lazy;
 use rusb::UsbContext;
 use std::{
     cell::{Cell, RefCell},
+    sync::OnceLock,
     thread,
 };
 use usbredirhost::rusb;
@@ -174,32 +174,34 @@ impl ObjectImpl for UsbRedir {
     }
 
     fn signals() -> &'static [Signal] {
-        static SIGNALS: Lazy<Vec<Signal>> = Lazy::new(|| {
-            vec![
-                Signal::builder("device-state-set")
-                    .param_types([device::Device::static_type(), bool::static_type()])
-                    .build(),
-                Signal::builder("show-error")
-                    .param_types([String::static_type()])
-                    // TODO: <glib::signal::Inhibit>::static_type().into(),
-                    .return_type_from(bool::static_type())
-                    .class_handler(|_token, args| {
-                        let inst = args[0].get::<super::UsbRedir>().unwrap();
-                        let imp = inst.imp();
-                        let msg: String = args[1].get().unwrap();
-                        imp.error_label.set_label(&msg);
-                        imp.infobar_revealer.set_reveal_child(true);
-                        Some(true.to_value())
-                    })
-                    .accumulator(|_hint, ret, value| {
-                        let handled: bool = value.get().unwrap_or_default();
-                        *ret = value.clone();
-                        !handled
-                    })
-                    .build(),
-            ]
-        });
-        SIGNALS.as_ref()
+        static SIGNALS: OnceLock<Vec<Signal>> = OnceLock::new();
+        SIGNALS
+            .get_or_init(|| {
+                vec![
+                    Signal::builder("device-state-set")
+                        .param_types([device::Device::static_type(), bool::static_type()])
+                        .build(),
+                    Signal::builder("show-error")
+                        .param_types([String::static_type()])
+                        // TODO: <glib::signal::Inhibit>::static_type().into(),
+                        .return_type_from(bool::static_type())
+                        .class_handler(|_token, args| {
+                            let inst = args[0].get::<super::UsbRedir>().unwrap();
+                            let imp = inst.imp();
+                            let msg: String = args[1].get().unwrap();
+                            imp.error_label.set_label(&msg);
+                            imp.infobar_revealer.set_reveal_child(true);
+                            Some(true.to_value())
+                        })
+                        .accumulator(|_hint, ret, value| {
+                            let handled: bool = value.get().unwrap_or_default();
+                            *ret = value.clone();
+                            !handled
+                        })
+                        .build(),
+                ]
+            })
+            .as_ref()
     }
 
     fn dispose(&self) {
