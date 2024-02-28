@@ -1,6 +1,6 @@
 [workspace]
 members = [
-#    "demo",
+    "demo",
     "keycodemap",
     "rdw4",
     "rdw4-rdp",
@@ -12,6 +12,6 @@ exclude = [
     "cbindgen",
 ]
 resolver = "2"
-#default-members = ["demo"]
+default-members = ["demo"]
 
 [workspace.dependencies]
