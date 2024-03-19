@@ -221,9 +221,8 @@ fn watch_clipboard(
 }
 
 fn clipboard_from_selection(selection: ClipboardSelection) -> Option<(gdk::Clipboard, usize)> {
-    let display = match gdk::Display::default() {
-        Some(display) => display,
-        None => return None,
+    let Some(display) = gdk::Display::default() else {
+        return None;
     };
 
     match selection {
