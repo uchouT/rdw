@@ -76,6 +76,9 @@ async fn display_from_opt(opt: Arc<RefCell<AppOptions>>) -> Option<Display<'stat
             .unwrap()
             .map(Into::into)
     } else {
+        if opt.borrow().wait {
+            unimplemented!(); // FIXME
+        }
         BusName::try_from("org.qemu").ok()
     };
 
