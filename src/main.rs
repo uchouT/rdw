@@ -4,7 +4,7 @@ use glib::MainContext;
 use gtk::{gio, glib, prelude::*};
 use qemu_display::{util, Chardev, Console, Display};
 use rdw::gtk;
-use std::{cell::RefCell, convert::TryFrom, sync::Arc};
+use std::{cell::RefCell, convert::TryFrom, rc::Rc};
 use zbus::names::BusName;
 
 mod audio;
@@ -23,7 +23,7 @@ struct Inner {
 
 #[derive(Clone)]
 struct App {
-    inner: Arc<Inner>,
+    inner: Rc<Inner>,
 }
 
 #[derive(Debug, Default)]
@@ -36,7 +36,7 @@ struct AppOptions {
     wait: bool,
 }
 
-async fn display_from_opt(opt: Arc<RefCell<AppOptions>>) -> Option<Display<'static>> {
+async fn display_from_opt(opt: Rc<RefCell<AppOptions>>) -> Option<Display<'static>> {
     #[cfg(feature = "qmp")]
     if let Some(qmp_addr) = &opt.borrow().qmp {
         return Some(Display::new_qmp(qmp_addr).await.unwrap());
@@ -145,7 +145,7 @@ impl App {
             None,
         );
 
-        let opt: Arc<RefCell<AppOptions>> = Default::default();
+        let opt: Rc<RefCell<AppOptions>> = Default::default();
         let opt_clone = opt.clone();
         app.connect_handle_local_options(move |_, opt| {
             let mut app_opt = opt_clone.borrow_mut();
@@ -173,7 +173,7 @@ impl App {
         });
 
         let app = App {
-            inner: Arc::new(Inner {
+            inner: Rc::new(Inner {
                 app,
                 #[cfg(unix)]
                 usbredir: Default::default(),
