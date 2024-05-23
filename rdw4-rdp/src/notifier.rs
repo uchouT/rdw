@@ -26,17 +26,15 @@ struct NotifierInner {
     #[cfg(windows)]
     event: HANDLE,
     #[cfg(unix)]
-    fd: RawFd,
+    fd: nix::sys::eventfd::EventFd,
 }
 
+#[cfg(windows)]
 impl Drop for NotifierInner {
     fn drop(&mut self) {
-        #[cfg(windows)]
         unsafe {
             CloseHandle(self.event).unwrap();
         }
-        #[cfg(unix)]
-        let _ = nix::unistd::close(self.fd);
     }
 }
 
@@ -60,7 +58,7 @@ impl Notifier {
         #[cfg(unix)]
         {
             use nix::sys::eventfd::*;
-            let fd = eventfd(
+            let fd = EventFd::from_value_and_flags(
                 0,
                 EfdFlags::EFD_CLOEXEC | EfdFlags::EFD_NONBLOCK | EfdFlags::EFD_SEMAPHORE,
             )
@@ -79,11 +77,12 @@ impl Notifier {
         }
         #[cfg(unix)]
         {
+            // FIXME freerdp-rs should take an ownedfd
             Ok(Handle::new_fd_event(
                 &[],
                 false,
                 false,
-                nix::unistd::dup(self.inner.fd)
+                nix::unistd::dup(self.inner.fd.as_raw_fd())
                     .map_err(|e| RdpError::Failed(format!("dup() failed: {}", e)))?,
                 freerdp::winpr::FdMode::READ,
             ))
@@ -101,7 +100,7 @@ impl Notifier {
         }
         #[cfg(unix)]
         {
-            let st = unsafe { gio::UnixOutputStream::with_fd(self.inner.fd) };
+            let st = unsafe { gio::UnixOutputStream::with_fd(self.inner.fd.as_raw_fd()) };
             let buffer = 1u64.to_ne_bytes();
             st.write_all_future(buffer, glib::Priority::default())
                 .await
@@ -121,7 +120,7 @@ impl Notifier {
         }
         #[cfg(unix)]
         {
-            let st = unsafe { gio::UnixInputStream::with_fd(self.inner.fd) };
+            let st = unsafe { gio::UnixInputStream::with_fd(self.inner.fd.as_raw_fd()) };
             let buffer = 1u64.to_ne_bytes();
             st.read_all(buffer, Cancellable::NONE)
                 .map_err(|e| RdpError::Failed(format!("read() failed: {}", e)))?;
