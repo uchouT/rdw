@@ -10,7 +10,7 @@ bindings = ["rdw/bindings"]
 capi = []
 
 [build-dependencies]
-cargo_metadata = "0.14"
+cargo_metadata = "0.18"
 cbindgen = { path = "../cbindgen", features = ["gobject"] }
 system-deps = "6.2"
 
