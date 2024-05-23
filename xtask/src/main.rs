@@ -1,8 +1,8 @@
 use std::{
-    env,
+    env, fs,
     path::{Path, PathBuf},
 };
-use xshell::{cmd, write_file};
+use xshell::{cmd, Shell};
 
 type DynError = Box<dyn std::error::Error>;
 
@@ -43,6 +43,7 @@ fn codegen() -> Result<(), DynError> {
     let keycodemap_src = project_root().join("keycodemap").join("src");
     let keymaps_csv = keycodemapdb.join("data").join("keymaps.csv");
     let keymap_gen = keycodemapdb.join("tools").join("keymap-gen");
+    let sh = Shell::new()?;
 
     let from = [
         "xorgevdev",
@@ -58,10 +59,11 @@ fn codegen() -> Result<(), DynError> {
         for to in &to {
             let varname = format!("keymap_{}2{}", from, to);
             let out = cmd!(
+                sh,
                 "{keymap_gen} code-map --lang rust --varname {varname} {keymaps_csv} {from} {to}"
             )
             .read()?;
-            write_file(keycodemap_src.join(format!("{}.rs", varname)), out)?;
+            fs::write(keycodemap_src.join(format!("{}.rs", varname)), out)?;
         }
     }
     Ok(())
