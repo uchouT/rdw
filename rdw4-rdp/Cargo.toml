@@ -22,8 +22,8 @@ log = "0.4"
 derivative = "2.2.0"
 rdw = { package = "rdw4", path = "../rdw4", default-features = false }
 freerdp = { package = "freerdp2", git = "https://github.com/elmarco/freerdp-rs.git" }
-nix = "0.23.0"
-futures = { version = "0.3.17", features = ["executor"] }
+nix = "0.23.2"
+futures = { version = "0.3.30", features = ["executor"] }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.41.0", features = [
