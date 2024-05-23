@@ -23,7 +23,7 @@ rdw4 = { version = "0.1", feature = "bindings" }
 log = "0.4"
 derivative = "2.2.0"
 libc = "0.2.155"
-libloading = "0.7.4"
+libloading = "0.8.3"
 khronos-egl = { version = "5.0", features = ["static"] }
 gl = "0.14.0"
 usbredirhost = "0.2"
