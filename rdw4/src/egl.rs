@@ -80,19 +80,19 @@ mod imp {
     }
 
     pub(crate) fn display(ctxt: &gdk::GLContext) -> Option<khronos_egl::Display> {
-        #[cfg(any(wayland, windows, x11))]
+        #[cfg(any(feature = "wayland", windows, feature = "x11"))]
         use gtk::glib::object::Cast;
 
         let Some(_dpy) = ctxt.display() else {
             return None;
         };
 
-        #[cfg(wayland)]
+        #[cfg(feature = "wayland")]
         if let Ok(dpy) = _dpy.clone().downcast::<gdk_wl::WaylandDisplay>() {
             return dpy.egl_display();
         }
 
-        #[cfg(x11)]
+        #[cfg(feature = "x11")]
         if let Ok(dpy) = _dpy.clone().downcast::<gdk_x11::X11Display>() {
             return dpy.egl_display();
         };

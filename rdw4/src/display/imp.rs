@@ -1,6 +1,5 @@
 use super::*;
-use crate::display::DisplayExt;
-use crate::picture::Picture;
+use crate::{display::DisplayExt, picture::Picture};
 use glib::{clone, subclass::Signal, SourceId};
 use gtk::{graphene, subclass::prelude::*};
 use std::{
@@ -10,7 +9,7 @@ use std::{
     time::Duration,
 };
 
-#[cfg(all(wayland, not(feature = "bindings")))]
+#[cfg(all(feature = "wayland", not(feature = "bindings")))]
 mod wayland;
 
 #[cfg(all(windows, not(feature = "bindings")))]
@@ -51,7 +50,7 @@ pub struct Display {
     pub(crate) grabbed: Cell<Grab>,
     pub(crate) shortcuts_inhibited_id: Cell<Option<glib::SignalHandlerId>>,
 
-    #[cfg(wayland)]
+    #[cfg(feature = "wayland")]
     wayland: wayland::Helper,
 
     #[cfg(windows)]
@@ -186,7 +185,7 @@ impl ObjectImpl for Display {
     }
 
     fn dispose(&self) {
-        #[cfg(wayland)]
+        #[cfg(feature = "wayland")]
         self.wayland.dispose();
 
         while let Some(child) = self.obj().first_child() {
@@ -340,7 +339,7 @@ impl WidgetImpl for Display {
     fn realize(&self) {
         self.parent_realize();
 
-        #[cfg(wayland)]
+        #[cfg(feature = "wayland")]
         if let Ok(dpy) = self.obj().display().downcast::<gdk_wl::WaylandDisplay>() {
             self.wayland.realize(&self.obj(), &dpy);
         }
@@ -353,7 +352,7 @@ impl WidgetImpl for Display {
 
     fn unrealize(&self) {
         match self.obj().display().backend() {
-            #[cfg(wayland)]
+            #[cfg(feature = "wayland")]
             gdk::Backend::Wayland => self.wayland.unrealize(),
             #[cfg(windows)]
             gdk::Backend::Win32 => self.win32.unrealize(),
@@ -537,7 +536,7 @@ impl Display {
         self.obj().emit_by_name::<()>("motion", &[&x, &y]);
     }
 
-    #[cfg(any(wayland, windows))]
+    #[cfg(any(feature = "wayland", windows))]
     pub(crate) fn do_motion_relative(&self, dx: f64, dy: f64) {
         if self.read_only() {
             return;
@@ -621,7 +620,7 @@ impl Display {
 
     pub(crate) fn ungrab_mouse(&self) {
         if self.grabbed.get().contains(Grab::MOUSE) {
-            #[cfg(wayland)]
+            #[cfg(feature = "wayland")]
             self.wayland.ungrab_mouse();
 
             #[cfg(windows)]
@@ -749,13 +748,13 @@ impl Display {
     }
 
     fn try_grab_device(&self, _device: gdk::Device) -> bool {
-        #[cfg(wayland)]
+        #[cfg(feature = "wayland")]
         return self.wayland.try_grab_device(&self.obj(), _device);
 
         #[cfg(windows)]
         return self.win32.try_grab_device(&self.obj(), _device);
 
-        #[cfg(not(any(wayland, windows)))]
+        #[cfg(not(any(feature = "wayland", windows)))]
         false
     }
 
@@ -839,10 +838,12 @@ impl Display {
             .map(|w| w.handle())
     }
 
-    #[cfg(wayland)]
+    #[cfg(feature = "wayland")]
     fn wl_surface(&self) -> Option<gdk_wl::wayland_client::protocol::wl_surface::WlSurface> {
+        use gdk_wl::prelude::WaylandSurfaceExtManual;
+
         self.surface()
             .and_then(|s| s.downcast::<gdk_wl::WaylandSurface>().ok())
-            .and_then(|w| w.wl_surface().ok())
+            .and_then(|w| w.wl_surface())
     }
 }

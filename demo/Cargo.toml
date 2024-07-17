@@ -22,4 +22,3 @@ rdw-vnc = { package = "rdw4-vnc", path = "../rdw4-vnc", default-features = false
 package = "libadwaita"
 features = ["v1_3"]
 version = "0.7"
-git = "https://gitlab.gnome.org/World/Rust/libadwaita-rs"
