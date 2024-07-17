@@ -57,7 +57,9 @@ impl Helper {
             .connection_fd()
             .as_raw_fd();
         let source = glib::source::unix_fd_add_local(fd, glib::IOCondition::IN, move |_, _| {
-            connection.prepare_read().unwrap().read().unwrap();
+            if let Some(c) = connection.prepare_read() {
+                c.read().unwrap();
+            }
             glib::ControlFlow::Continue
         });
 
