@@ -176,115 +176,180 @@ mod imp {
 
             self.obj().set_mouse_absolute(true);
 
-            self.obj().connect_key_event(clone!(@weak self as this => move |_, keyval, keycode, event| {
-                log::debug!("key-event: {:?}", (keyval, keycode, event));
-                if keyval == gdk::Key::Pause.into_glib() {
-                    unimplemented!()
+            self.obj().connect_key_event(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, keyval, keycode, event| {
+                    log::debug!("key-event: {:?}", (keyval, keycode, event));
+                    if keyval == gdk::Key::Pause.into_glib() {
+                        unimplemented!()
+                    }
+                    if let Some(&xt) = this.keymap.get().and_then(|m| m.get(keycode as usize)) {
+                        MainContext::default().spawn_local(glib::clone!(
+                            #[weak]
+                            this,
+                            async move {
+                                let flags = if xt & 0x100 > 0 {
+                                    KbdFlags::EXTENDED
+                                } else {
+                                    KbdFlags::empty()
+                                };
+                                if event.contains(rdw::KeyEvent::PRESS) {
+                                    let _ = this
+                                        .send_event(Event::Keyboard(flags | KbdFlags::DOWN, xt))
+                                        .await;
+                                }
+                                if event.contains(rdw::KeyEvent::RELEASE) {
+                                    let _ = this
+                                        .send_event(Event::Keyboard(flags | KbdFlags::RELEASE, xt))
+                                        .await;
+                                }
+                            }
+                        ));
+                    }
                 }
-                if let Some(&xt) = this.keymap.get().and_then(|m| m.get(keycode as usize)) {
-                    MainContext::default().spawn_local(glib::clone!(@weak this => async move {
-                        let flags = if xt & 0x100 > 0 {
-                            KbdFlags::EXTENDED
-                        } else {
-                            KbdFlags::empty()
-                        };
-                        if event.contains(rdw::KeyEvent::PRESS) {
-                            let _ = this.send_event(Event::Keyboard(flags | KbdFlags::DOWN, xt)).await;
-                        }
-                        if event.contains(rdw::KeyEvent::RELEASE) {
-                            let _ = this.send_event(Event::Keyboard(flags | KbdFlags::RELEASE, xt)).await;
-                        }
-                    }));
-                }
-            }));
+            ));
 
-            self.obj()
-                .connect_motion(clone!(@weak self as this => move |_, x, y| {
+            self.obj().connect_motion(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, x, y| {
                     log::debug!("motion: {:?}", (x, y));
-                    MainContext::default().spawn_local(glib::clone!(@weak this => async move {
-                        this.last_mouse.set((x, y));
-                        let _ = this.send_event(Event::Mouse(PtrFlags::MOVE, x as _, y as _)).await;
-                    }));
-                }));
+                    MainContext::default().spawn_local(glib::clone!(
+                        #[weak]
+                        this,
+                        async move {
+                            this.last_mouse.set((x, y));
+                            let _ = this
+                                .send_event(Event::Mouse(PtrFlags::MOVE, x as _, y as _))
+                                .await;
+                        }
+                    ));
+                }
+            ));
 
-            self.obj()
-                .connect_motion_relative(clone!(@weak self as this => move |_, dx, dy| {
+            self.obj().connect_motion_relative(clone!(
+                #[weak(rename_to = _this)]
+                self,
+                move |_, dx, dy| {
                     log::debug!("motion-relative: {:?}", (dx, dy));
-                }));
+                }
+            ));
 
-            self.obj()
-                .connect_mouse_press(clone!(@weak self as this => move |_, button| {
+            self.obj().connect_mouse_press(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, button| {
                     log::debug!("mouse-press: {:?}", button);
-                    MainContext::default().spawn_local(glib::clone!(@weak this => async move {
-                        let _ = this.mouse_click(true, button).await;
-                    }));
-                }));
+                    MainContext::default().spawn_local(glib::clone!(
+                        #[weak]
+                        this,
+                        async move {
+                            let _ = this.mouse_click(true, button).await;
+                        }
+                    ));
+                }
+            ));
 
-            self.obj()
-                .connect_mouse_release(clone!(@weak self as this => move |_, button| {
+            self.obj().connect_mouse_release(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, button| {
                     log::debug!("mouse-release: {:?}", button);
-                    MainContext::default().spawn_local(glib::clone!(@weak this => async move {
-                        let _ = this.mouse_click(false, button).await;
-                    }));
-                }));
+                    MainContext::default().spawn_local(glib::clone!(
+                        #[weak]
+                        this,
+                        async move {
+                            let _ = this.mouse_click(false, button).await;
+                        }
+                    ));
+                }
+            ));
 
-            self.obj().connect_resize_request(
-                clone!(@weak self as this => move |_, width, height, wmm, hmm| {
+            self.obj().connect_resize_request(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, width, height, wmm, hmm| {
                     let scale_factor = this.obj().scale_factor() * 100;
-                    log::debug!("resize-request: {:?}", (width, height, wmm, hmm, scale_factor));
-                    MainContext::default().spawn_local(glib::clone!(@weak this => async move {
-                        let _ = this.send_event(Event::MonitorLayout(vec![MonitorLayout::new(
-                            MonitorFlags::PRIMARY,
-                            0, 0,
-                            width, height,
-                            wmm, hmm,
-                            Orientation::Landscape,
-                            scale_factor as _,
-                            100,
-                        )])).await;
-                    }));
-                }),
-            );
+                    log::debug!(
+                        "resize-request: {:?}",
+                        (width, height, wmm, hmm, scale_factor)
+                    );
+                    MainContext::default().spawn_local(glib::clone!(
+                        #[weak]
+                        this,
+                        async move {
+                            let _ = this
+                                .send_event(Event::MonitorLayout(vec![MonitorLayout::new(
+                                    MonitorFlags::PRIMARY,
+                                    0,
+                                    0,
+                                    width,
+                                    height,
+                                    wmm,
+                                    hmm,
+                                    Orientation::Landscape,
+                                    scale_factor as _,
+                                    100,
+                                )]))
+                                .await;
+                        }
+                    ));
+                }
+            ));
 
             let ec = gtk::EventControllerScroll::new(gtk::EventControllerScrollFlags::BOTH_AXES);
-            ec.connect_scroll(
-                clone!(@weak self as this => @default-panic, move |_, dx, dy| {
-                    MainContext::default().spawn_local(glib::clone!(@weak this => async move {
-                        let _ = this.mouse_scroll(PtrFlags::HWHEEL, dx).await;
-                        let _ = this.mouse_scroll(PtrFlags::WHEEL, dy).await;
-                    }));
+            ec.connect_scroll(clone!(
+                #[weak(rename_to = this)]
+                self,
+                #[upgrade_or_panic]
+                move |_, dx, dy| {
+                    MainContext::default().spawn_local(glib::clone!(
+                        #[weak]
+                        this,
+                        async move {
+                            let _ = this.mouse_scroll(PtrFlags::HWHEEL, dx).await;
+                            let _ = this.mouse_scroll(PtrFlags::WHEEL, dy).await;
+                        }
+                    ));
                     glib::Propagation::Proceed
-                }),
-            );
+                }
+            ));
             self.obj().add_controller(ec);
 
             let cb = gdk::prelude::DisplayExt::clipboard(&self.obj().display());
-            let watch_id = cb.connect_changed(clone!(@weak self as this => move |clipboard| {
-                let is_local = clipboard.is_local();
-                if let (false, formats) = (is_local, clipboard.formats()) {
-                    let list = formats.mime_types()
-                                      .iter()
-                                      .map(|m| {
-                                          let id = format_from_mime(m);
-                                          let name = if id.is_some() {
-                                              None
-                                          } else {
-                                              Some(m.to_string())
-                                          };
-                                          CliprdrFormat {
-                                              id,
-                                              name,
-                                          }
-                                      })
-                                      .collect::<Vec<_>>();
-                    if !list.is_empty() {
-                        log::debug!(">clipboard-grab: {:?}", list);
-                        MainContext::default().spawn_local(glib::clone!(@weak this => async move {
-                            let _ = this.send_event(Event::ClipboardFormatList(list)).await;
-                        }));
+            let watch_id = cb.connect_changed(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |clipboard| {
+                    let is_local = clipboard.is_local();
+                    if let (false, formats) = (is_local, clipboard.formats()) {
+                        let list = formats
+                            .mime_types()
+                            .iter()
+                            .map(|m| {
+                                let id = format_from_mime(m);
+                                let name = if id.is_some() {
+                                    None
+                                } else {
+                                    Some(m.to_string())
+                                };
+                                CliprdrFormat { id, name }
+                            })
+                            .collect::<Vec<_>>();
+                        if !list.is_empty() {
+                            log::debug!(">clipboard-grab: {:?}", list);
+                            MainContext::default().spawn_local(glib::clone!(
+                                #[weak]
+                                this,
+                                async move {
+                                    let _ = this.send_event(Event::ClipboardFormatList(list)).await;
+                                }
+                            ));
+                        }
                     }
                 }
-            }));
+            ));
             self.clipboard.watch_id.set(Some(watch_id));
         }
     }
@@ -304,8 +369,12 @@ mod imp {
             match e {
                 RdpEvent::Authenticate { .. } => {
                     self.state.replace(Some(e));
-                    glib::idle_add_local(
-                        glib::clone!(@weak self as this => @default-return glib::ControlFlow::Break, move || {
+                    glib::idle_add_local(glib::clone!(
+                        #[weak(rename_to = this)]
+                        self,
+                        #[upgrade_or]
+                        glib::ControlFlow::Break,
+                        move || {
                             let res = this.obj().emit_by_name::<bool>("rdp-authenticate", &[]);
                             match this.state.take().unwrap() {
                                 RdpEvent::Authenticate { settings, tx } => {
@@ -320,8 +389,8 @@ mod imp {
                                 }
                             }
                             glib::ControlFlow::Break
-                        }),
-                    );
+                        }
+                    ));
                 }
                 RdpEvent::Connected => self.set_connected(true),
                 RdpEvent::Disconnected => self.set_connected(false),
@@ -392,29 +461,55 @@ mod imp {
                     let cb = gdk::prelude::DisplayExt::clipboard(&self.obj().display());
                     let content = rdw::ContentProvider::new(
                         &formats,
-                        clone!(@weak self as this => @default-return None, move |mime, stream, prio| {
-                            log::debug!("content-provider-write: {:?}", (mime, stream));
-                            let format = match format_from_mime(mime) {
-                                Some(format) => format,
-                                _ => return None,
-                            };
-                            Some(Box::pin(clone!(@weak this, @strong stream => @default-return panic!(), async move {
-                                use futures::stream::StreamExt;
+                        clone!(
+                            #[weak(rename_to = this)]
+                            self,
+                            #[upgrade_or]
+                            None,
+                            move |mime, stream, prio| {
+                                log::debug!("content-provider-write: {:?}", (mime, stream));
+                                let format = match format_from_mime(mime) {
+                                    Some(format) => format,
+                                    _ => return None,
+                                };
+                                Some(Box::pin(clone!(
+                                    #[weak]
+                                    this,
+                                    #[strong]
+                                    stream,
+                                    #[upgrade_or_panic]
+                                    async move {
+                                        use futures::stream::StreamExt;
 
-                                if this.clipboard.tx.borrow().is_some() {
-                                    return Err(glib::Error::new(gio::IOErrorEnum::Failed, "clipboard request pending"));
-                                }
-                                let (tx, mut rx) = futures::channel::mpsc::channel(1);
-                                this.clipboard.tx.replace(Some((format, tx)));
-                                if this.send_event(Event::ClipboardRequest(format)).await.is_ok() {
-                                    if let Some(bytes) = rx.next().await {
-                                        return stream.write_bytes_future(&bytes, prio).await.map(|_| ());
+                                        if this.clipboard.tx.borrow().is_some() {
+                                            return Err(glib::Error::new(
+                                                gio::IOErrorEnum::Failed,
+                                                "clipboard request pending",
+                                            ));
+                                        }
+                                        let (tx, mut rx) = futures::channel::mpsc::channel(1);
+                                        this.clipboard.tx.replace(Some((format, tx)));
+                                        if this
+                                            .send_event(Event::ClipboardRequest(format))
+                                            .await
+                                            .is_ok()
+                                        {
+                                            if let Some(bytes) = rx.next().await {
+                                                return stream
+                                                    .write_bytes_future(&bytes, prio)
+                                                    .await
+                                                    .map(|_| ());
+                                            }
+                                        }
+
+                                        Err(glib::Error::new(
+                                            gio::IOErrorEnum::Failed,
+                                            "failed to request clipboard data",
+                                        ))
                                     }
-                                }
-
-                                Err(glib::Error::new(gio::IOErrorEnum::Failed, "failed to request clipboard data"))
-                            })))
-                        }),
+                                )))
+                            }
+                        ),
                     );
                     if let Err(e) = cb.set_content(Some(&content)) {
                         log::warn!("Failed to set clipboard content: {}", e);
@@ -424,31 +519,39 @@ mod imp {
                     if self.obj().read_only() {
                         return;
                     }
-                    glib::MainContext::default().spawn_local(glib::clone!(@weak self as this => async move {
-                        let mut data = None;
+                    glib::MainContext::default().spawn_local(glib::clone!(
+                        #[weak(rename_to = this)]
+                        self,
+                        async move {
+                            let mut data = None;
 
-                        if let Some(mime) = mime_from_format(format) {
-                            let cb = gdk::prelude::DisplayExt::clipboard(&this.obj().display());
-                            let res = cb.read_future(&[mime], glib::Priority::default()).await;
-                            log::debug!("clipboard-read: {:?}", res);
-                            if let Ok((stream, _)) = res {
-                                let out = gio::MemoryOutputStream::new_resizable();
-                                let res = out.splice_future(
-                                    &stream,
-                                    gio::OutputStreamSpliceFlags::CLOSE_SOURCE | gio::OutputStreamSpliceFlags::CLOSE_TARGET,
-                                    glib::Priority::default()).await;
-                                if res.is_ok() {
-                                    let bytes = out.steal_as_bytes();
-                                    if format.is_text() {
-                                        data = utf16_from_utf8(bytes.as_ref()).ok();
-                                    } else {
-                                        data = Some(bytes.to_vec());
+                            if let Some(mime) = mime_from_format(format) {
+                                let cb = gdk::prelude::DisplayExt::clipboard(&this.obj().display());
+                                let res = cb.read_future(&[mime], glib::Priority::default()).await;
+                                log::debug!("clipboard-read: {:?}", res);
+                                if let Ok((stream, _)) = res {
+                                    let out = gio::MemoryOutputStream::new_resizable();
+                                    let res = out
+                                        .splice_future(
+                                            &stream,
+                                            gio::OutputStreamSpliceFlags::CLOSE_SOURCE
+                                                | gio::OutputStreamSpliceFlags::CLOSE_TARGET,
+                                            glib::Priority::default(),
+                                        )
+                                        .await;
+                                    if res.is_ok() {
+                                        let bytes = out.steal_as_bytes();
+                                        if format.is_text() {
+                                            data = utf16_from_utf8(bytes.as_ref()).ok();
+                                        } else {
+                                            data = Some(bytes.to_vec());
+                                        }
                                     }
                                 }
                             }
+                            let _ = this.send_event(Event::ClipboardData(data)).await;
                         }
-                        let _ = this.send_event(Event::ClipboardData(data)).await;
-                    }));
+                    ));
                 }
                 RdpEvent::Eol => self.set_connected(false),
             }
@@ -517,21 +620,25 @@ mod imp {
             });
 
             // the "dispatch loop"
-            MainContext::default().spawn_local(clone!(@weak self as this => async move {
-                while let Some(e) = rdp_event_rx.next().await {
-                    let eol = matches!(e, RdpEvent::Eol);
-                    this.dispatch_rdp_event(e);
-                    if eol {
-                        break;
+            MainContext::default().spawn_local(clone!(
+                #[weak(rename_to = this)]
+                self,
+                async move {
+                    while let Some(e) = rdp_event_rx.next().await {
+                        let eol = matches!(e, RdpEvent::Eol);
+                        this.dispatch_rdp_event(e);
+                        if eol {
+                            break;
+                        }
+                    }
+                    thread.join().unwrap();
+                    this.tx.replace(None);
+                    this.rx.replace(Some(rdp_event_rx));
+                    if let Some(eodl) = this.eodl_tx.take() {
+                        let _ = eodl.send(());
                     }
                 }
-                thread.join().unwrap();
-                this.tx.replace(None);
-                this.rx.replace(Some(rdp_event_rx));
-                if let Some(eodl) = this.eodl_tx.take() {
-                    let _ = eodl.send(());
-                }
-            }));
+            ));
 
             conn_rx.await.unwrap()
         }
@@ -550,9 +657,13 @@ mod imp {
             self.eodl_tx.replace(Some(eodl_tx));
 
             let (tx, rx) = oneshot::channel();
-            MainContext::default().spawn_local(glib::clone!(@weak self as this => async move {
-                let _ = this.send_event(Event::Disconnect(tx)).await;
-            }));
+            MainContext::default().spawn_local(glib::clone!(
+                #[weak(rename_to = this)]
+                self,
+                async move {
+                    let _ = this.send_event(Event::Disconnect(tx)).await;
+                }
+            ));
 
             let res = rx.await.unwrap_or(Ok(()));
             let _ = eodl_rx.await;

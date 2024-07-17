@@ -43,34 +43,41 @@ impl Helper {
             return;
         }
 
-        let filter = dpy.add_filter(clone!(@weak display => @default-panic, move |_, msg, _rv| {
-            if !display.imp().grabbed.get().contains(crate::Grab::MOUSE) || msg.message != WM_INPUT {
-                return gdk_win32::Win32MessageFilterReturn::Continue;
-            }
-
-            let mut input = RAWINPUT::default();
-            let mut pcbsize = std::mem::size_of_val(&input) as u32;
-            unsafe {
-                let res = GetRawInputData(
-                    HRAWINPUT(msg.lParam.0),
-                    RID_INPUT,
-                    Some(&mut input as *mut _ as *mut _),
-                    &mut pcbsize as *mut _,
-                    std::mem::size_of::<RAWINPUTHEADER>() as _,
-                );
-                if res == u32::MAX {
-                    log::warn!("Failed to GetRawInputData");
+        let filter = dpy.add_filter(clone!(
+            #[weak]
+            display,
+            #[upgrade_or_panic]
+            move |_, msg, _rv| {
+                if !display.imp().grabbed.get().contains(crate::Grab::MOUSE)
+                    || msg.message != WM_INPUT
+                {
+                    return gdk_win32::Win32MessageFilterReturn::Continue;
                 }
-                if input.header.dwType == RIM_TYPEMOUSE.0 {
-                    let (dx, dy) = (input.data.mouse.lLastX, input.data.mouse.lLastY);
-                    let scale = display.scale_factor() as f64;
-                    let (dx, dy) = (dx as f64 / scale, dy as f64 / scale);
-                    display.imp().do_motion_relative(dx, dy);
-                }
-            }
 
-            gdk_win32::Win32MessageFilterReturn::Continue
-        }));
+                let mut input = RAWINPUT::default();
+                let mut pcbsize = std::mem::size_of_val(&input) as u32;
+                unsafe {
+                    let res = GetRawInputData(
+                        HRAWINPUT(msg.lParam.0),
+                        RID_INPUT,
+                        Some(&mut input as *mut _ as *mut _),
+                        &mut pcbsize as *mut _,
+                        std::mem::size_of::<RAWINPUTHEADER>() as _,
+                    );
+                    if res == u32::MAX {
+                        log::warn!("Failed to GetRawInputData");
+                    }
+                    if input.header.dwType == RIM_TYPEMOUSE.0 {
+                        let (dx, dy) = (input.data.mouse.lLastX, input.data.mouse.lLastY);
+                        let scale = display.scale_factor() as f64;
+                        let (dx, dy) = (dx as f64 / scale, dy as f64 / scale);
+                        display.imp().do_motion_relative(dx, dy);
+                    }
+                }
+
+                gdk_win32::Win32MessageFilterReturn::Continue
+            }
+        ));
 
         self.filter.set(Some(filter));
     }

@@ -87,12 +87,14 @@ mod imp {
 
             self.obj().set_mouse_absolute(true);
 
-            self.obj().connect_key_event(
-                clone!(@weak self as this => move |_, keyval, keycode, event| {
+            self.obj().connect_key_event(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, keyval, keycode, event| {
                     log::debug!("key-event: {:?}", (event, keyval, keycode));
                     if let Some(&xt) = this.keymap.get().and_then(|m| m.get(keycode as usize)) {
                         if let Some(input) = this.input.upgrade() {
-                            if event.contains(rdw::KeyEvent::PRESS|rdw::KeyEvent::RELEASE) {
+                            if event.contains(rdw::KeyEvent::PRESS | rdw::KeyEvent::RELEASE) {
                                 input.key_press_and_release(xt as _)
                             } else if event.contains(rdw::KeyEvent::PRESS) {
                                 input.key_press(xt as _);
@@ -101,54 +103,86 @@ mod imp {
                             }
                         }
                     }
-                }),
-            );
-
-            self.obj().connect_motion(clone!(@weak self as this => move |_, x, y| {
-                log::debug!("motion: {:?}", (x, y));
-                if let Some(input) = this.input.upgrade() {
-                    input.position(x as _, y as _, this.nth_monitor as _, this.last_button_state());
                 }
-            }));
+            ));
 
-            self.obj()
-                .connect_motion_relative(clone!(@weak self as this => move |_, dx, dy| {
+            self.obj().connect_motion(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, x, y| {
+                    log::debug!("motion: {:?}", (x, y));
+                    if let Some(input) = this.input.upgrade() {
+                        input.position(
+                            x as _,
+                            y as _,
+                            this.nth_monitor as _,
+                            this.last_button_state(),
+                        );
+                    }
+                }
+            ));
+
+            self.obj().connect_motion_relative(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, dx, dy| {
                     log::debug!("motion-relative: {:?}", (dx, dy));
                     if let Some(input) = this.input.upgrade() {
                         input.motion(dx as _, dy as _, this.last_button_state());
                     }
-                }));
+                }
+            ));
 
-            self.obj()
-                .connect_mouse_press(clone!(@weak self as this => move |_, button| {
+            self.obj().connect_mouse_press(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, button| {
                     log::debug!("mouse-press: {:?}", button);
                     this.mouse_click(true, button);
-                }));
+                }
+            ));
 
-            self.obj()
-                .connect_mouse_release(clone!(@weak self as this => move |_, button| {
+            self.obj().connect_mouse_release(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, button| {
                     log::debug!("mouse-release: {:?}", button);
                     this.mouse_click(false, button);
-                }));
+                }
+            ));
 
-            self.obj()
-                .connect_scroll_discrete(clone!(@weak self as this => move |_, scroll| {
+            self.obj().connect_scroll_discrete(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, scroll| {
                     log::debug!("scroll-discrete: {:?}", scroll);
                     this.scroll(scroll);
-                }));
-
-            self.obj().connect_resize_request(clone!(@weak self as this => move |_, width, height, wmm, hmm| {
-                log::debug!("resize-request: {:?}", (width, height));
-                if let Some(main) = this.main.upgrade() {
-                    main.update_display_enabled(this.nth_monitor as _, true, false);
-                    main.update_display_mm(this.nth_monitor as _, wmm as _, hmm as _, false);
-                    main.update_display(this.nth_monitor as _, 0, 0, width as _, height as _, true);
                 }
-            }));
+            ));
+
+            self.obj().connect_resize_request(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, width, height, wmm, hmm| {
+                    log::debug!("resize-request: {:?}", (width, height));
+                    if let Some(main) = this.main.upgrade() {
+                        main.update_display_enabled(this.nth_monitor as _, true, false);
+                        main.update_display_mm(this.nth_monitor as _, wmm as _, hmm as _, false);
+                        main.update_display(
+                            this.nth_monitor as _,
+                            0,
+                            0,
+                            width as _,
+                            height as _,
+                            true,
+                        );
+                    }
+                }
+            ));
 
             let session = &self.session;
 
-            session.connect_channel_new(clone!(@weak self as this => move |_session, channel| {
+            session.connect_channel_new(clone!(#[weak(rename_to = this)] self, move |_session, channel| {
                 use spice::ChannelType::{self, *};
 
                 let Ok(type_) = ChannelType::try_from(channel.channel_type()) else {
@@ -160,7 +194,7 @@ mod imp {
                         let main = channel.clone().downcast::<spice::MainChannel>().unwrap();
                         this.main.set(Some(&main));
 
-                        main.connect_channel_event(clone!(@weak this => move |_, event| {
+                        main.connect_channel_event(clone!(#[weak] this, move |_, event| {
                             use spice::ChannelEvent::*;
 
                             if event == Closed {
@@ -168,13 +202,13 @@ mod imp {
                             }
                         }));
 
-                        main.connect_main_mouse_update(clone!(@weak this => move |main| {
+                        main.connect_main_mouse_update(clone!(#[weak] this, move |main| {
                             let mode = spice::MouseMode::from_bits_truncate(main.mouse_mode());
                             log::debug!("mouse-update: {:?}", mode);
                             this.obj().set_mouse_absolute(mode.contains(spice::MouseMode::CLIENT));
                         }));
 
-                        main.connect_main_clipboard_selection(clone!(@weak this => move |_main, selection, type_, data| {
+                        main.connect_main_clipboard_selection(clone!(#[weak] this, move |_main, selection, type_, data| {
                             log::debug!("clipboard-data: {:?}", (selection, type_, data.len()));
                             if let Some((req_type, mut tx)) = this.clipboard[selection as usize].tx.take() {
                                 if type_ != req_type as u32 {
@@ -187,21 +221,21 @@ mod imp {
                             }
                         }));
 
-                        main.connect_main_clipboard_selection_grab(clone!(@weak this => move |_main, selection, types| {
+                        main.connect_main_clipboard_selection_grab(clone!(#[weak] this, move |_main, selection, types| {
                             let types: Vec<_> = types.iter()
                                                      .filter_map(|&t| spice::ClipboardFormat::try_from(t as i32).ok())
                                                      .filter_map(util::mime_from_format)
                                                      .collect();
                             log::debug!("clipboard-grab: {:?}", (selection, &types));
                             if let Some(clipboard) = this.clipboard_from_selection(selection) {
-                                let content = rdw::ContentProvider::new(&types, clone!(@weak this => @default-return None, move |mime, stream, prio| {
+                                let content = rdw::ContentProvider::new(&types, clone!(#[weak] this, #[upgrade_or] None, move |mime, stream, prio| {
                                     log::debug!("content-provider-write: {:?}", (mime, stream));
                                     let format = match util::format_from_mime(mime) {
                                         Some(f) => f,
                                         None => return None,
                                     };
 
-                                    Some(Box::pin(clone!(@weak this, @strong stream => @default-return panic!(), async move {
+                                    Some(Box::pin(clone!(#[weak] this, #[strong] stream, #[upgrade_or_panic] async move {
                                         use futures::stream::StreamExt;
 
                                         if this.clipboard[selection as usize].tx.borrow().is_some() {
@@ -226,7 +260,7 @@ mod imp {
                             }
                         }));
 
-                        main.connect_main_clipboard_selection_release(clone!(@weak this => move |_main, selection| {
+                        main.connect_main_clipboard_selection_release(clone!(#[weak] this, move |_main, selection| {
                             log::debug!("clipboard-release: {:?}", selection);
                             if let Some(clipboard) = this.clipboard_from_selection(selection) {
                                 if let Err(e) = clipboard.set_content(gdk::ContentProvider::NONE) {
@@ -235,12 +269,12 @@ mod imp {
                             }
                         }));
 
-                        main.connect_main_clipboard_selection_request(clone!(@weak this => @default-return false, move |main, selection, type_| {
+                        main.connect_main_clipboard_selection_request(clone!(#[weak] this, #[upgrade_or] false, move |main, selection, type_| {
                             let mime = spice::ClipboardFormat::try_from(type_ as i32).map_or(None, util::mime_from_format);
                             log::debug!("clipboard-request: {:?}", (selection, mime));
 
                             if let (Some(mime), Some(clipboard)) = (mime, this.clipboard_from_selection(selection)) {
-                                glib::MainContext::default().spawn_local(glib::clone!(@weak this, @weak clipboard, @strong main => async move {
+                                glib::MainContext::default().spawn_local(glib::clone!(#[weak] clipboard, #[strong] main, async move {
                                     let res = clipboard.read_future(&[mime], glib::Priority::default()).await;
                                     log::debug!("clipboard-read: {:?}", res);
 
@@ -274,10 +308,10 @@ mod imp {
                         let input = channel.clone().downcast::<spice::InputsChannel>().unwrap();
                         this.input.set(Some(&input));
 
-                        input.connect_inputs_modifiers(clone!(@weak this => move |input| {
+                        input.connect_inputs_modifiers(clone!(move |input| {
                             let modifiers = input.key_modifiers();
                             log::debug!("inputs-modifiers: {}", modifiers);
-                            input.connect_channel_event(clone!(@weak this => move |input, event| {
+                            input.connect_channel_event(clone!(move |input, event| {
                                 if event == spice::ChannelEvent::Opened && input.socket().unwrap().family() == gio::SocketFamily::Unix {
                                     log::debug!("on unix socket");
                                 }
@@ -289,7 +323,7 @@ mod imp {
                         let dpy = channel.clone().downcast::<spice::DisplayChannel>().unwrap();
                         this.display.set(Some(&dpy));
 
-                        dpy.connect_display_primary_create(clone!(@weak this => move |_| {
+                        dpy.connect_display_primary_create(clone!(move |_| {
                             log::debug!("primary-create");
                         }));
 
@@ -297,17 +331,17 @@ mod imp {
                             log::debug!("primary-destroy");
                         });
 
-                        dpy.connect_display_mark(clone!(@weak this => move |_, mark| {
+                        dpy.connect_display_mark(clone!(#[weak] this, move |_, mark| {
                             log::debug!("primary-mark: {}", mark);
                             this.invalidate_monitor();
                         }));
 
-                        dpy.connect_display_invalidate(clone!(@weak this => move |_, x, y, w, h| {
+                        dpy.connect_display_invalidate(clone!(#[weak] this, move |_, x, y, w, h| {
                             log::debug!("primary-invalidate: {:?}", (x, y, w, h));
                             this.invalidate(x as _, y as _, w as _, h as _);
                         }));
 
-                        dpy.connect_gl_scanout_notify(clone!(@weak this => move |dpy| {
+                        dpy.connect_gl_scanout_notify(clone!(#[weak] this, move |dpy| {
                             let scanout = dpy.gl_scanout();
                             log::debug!("notify::gl-scanout: {:?}", scanout);
 
@@ -325,13 +359,13 @@ mod imp {
                             }
                         }));
 
-                        dpy.connect_gl_draw(clone!(@weak this => move |dpy, x, y, w, h| {
+                        dpy.connect_gl_draw(clone!(#[weak] this, move |dpy, x, y, w, h| {
                             log::debug!("gl-draw: {:?}", (x, y, w, h));
                             this.obj().update_area(x as _, y as _, w as _, h as _, 0, None);
                             dpy.gl_draw_done();
                         }));
 
-                        dpy.connect_monitors_notify(clone!(@weak this => move |dpy| {
+                        dpy.connect_monitors_notify(clone!(#[weak] this, move |dpy| {
                             let monitors = dpy.monitors();
                             log::debug!("notify::monitors: {:?}", monitors);
 
@@ -347,23 +381,23 @@ mod imp {
                     Cursor => {
                         let cursor = channel.clone().downcast::<spice::CursorChannel>().unwrap();
 
-                        cursor.connect_cursor_move(clone!(@weak this => move |_cursor, x, y| {
+                        cursor.connect_cursor_move(clone!(#[weak] this, move |_cursor, x, y| {
                             log::debug!("cursor-move: {:?}", (x, y));
                             this.obj().set_cursor_position(Some((x as _, y as _)));
                         }));
 
-                        cursor.connect_cursor_reset(clone!(@weak this => move |_cursor| {
+                        cursor.connect_cursor_reset(clone!(#[weak] this, move |_cursor| {
                             log::debug!("cursor-reset");
                             this.obj().define_cursor(None);
                         }));
 
-                        cursor.connect_cursor_hide(clone!(@weak this => move |_cursor| {
+                        cursor.connect_cursor_hide(clone!(#[weak] this, move |_cursor| {
                             log::debug!("cursor-hide");
                             let cursor = gdk::Cursor::from_name("none", None);
                             this.obj().define_cursor(cursor);
                         }));
 
-                        cursor.connect_cursor_notify(clone!(@weak this => move |cursor| {
+                        cursor.connect_cursor_notify(clone!(#[weak] this, move |cursor| {
                             let cursor = cursor.cursor();
                             log::debug!("cursor-notify: {:?}", cursor);
                             if let Some(cursor) = cursor {
@@ -418,22 +452,29 @@ mod imp {
     impl Display {
         fn add_clipboard_watch(&self, selection: u32) {
             let clipboard = self.clipboard_from_selection(selection).unwrap();
-            let watch_id = clipboard.connect_changed(clone!(@weak self as this => move |clipboard| {
-                let is_local = clipboard.is_local();
-                if let (false, Some(main), formats) = (is_local, this.main.upgrade(), clipboard.formats()) {
-                    let mut types = formats.mime_types()
-                                           .iter()
-                                           .filter_map(|m| util::format_from_mime(m))
-                                           .map(|f| f as u32)
-                                           .collect::<Vec<_>>();
-                    types.sort_unstable();
-                    types.dedup();
-                    if !types.is_empty() {
-                        log::debug!(">clipboard-grab({}): {:?}", selection, types);
-                        main.clipboard_selection_grab(selection, &types);
+            let watch_id = clipboard.connect_changed(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |clipboard| {
+                    let is_local = clipboard.is_local();
+                    if let (false, Some(main), formats) =
+                        (is_local, this.main.upgrade(), clipboard.formats())
+                    {
+                        let mut types = formats
+                            .mime_types()
+                            .iter()
+                            .filter_map(|m| util::format_from_mime(m))
+                            .map(|f| f as u32)
+                            .collect::<Vec<_>>();
+                        types.sort_unstable();
+                        types.dedup();
+                        if !types.is_empty() {
+                            log::debug!(">clipboard-grab({}): {:?}", selection, types);
+                            main.clipboard_selection_grab(selection, &types);
+                        }
                     }
                 }
-            }));
+            ));
 
             self.clipboard[selection as usize]
                 .watch_id

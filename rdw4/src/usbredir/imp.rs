@@ -217,36 +217,51 @@ impl WidgetImpl for UsbRedir {
 
         if let Some((ctxt, mut rx)) = RdwUsbContext::new() {
             let c = glib::MainContext::default();
-            c.spawn_local(clone!(@weak self as this => async move {
-                loop {
-                    match rx.next().await {
-                        Some(RdwUsbEvent::DeviceArrived(d)) => this.add_device(d),
-                        Some(RdwUsbEvent::DeviceLeft(d)) => this.remove_device(d),
-                        None => break,
+            c.spawn_local(clone!(
+                #[weak(rename_to = this)]
+                self,
+                async move {
+                    loop {
+                        match rx.next().await {
+                            Some(RdwUsbEvent::DeviceArrived(d)) => this.add_device(d),
+                            Some(RdwUsbEvent::DeviceLeft(d)) => this.remove_device(d),
+                            None => break,
+                        }
                     }
                 }
-            }));
+            ));
             self.ctxt.replace(Some(ctxt));
         }
 
-        self.listbox
-            .connect_row_activated(clone!(@weak self as this => move |_, row| {
+        self.listbox.connect_row_activated(clone!(
+            #[weak(rename_to = _this)]
+            self,
+            move |_, row| {
                 let row: row::Row = row.first_child().unwrap().downcast().unwrap();
                 row.switch().activate();
-            }));
+            }
+        ));
 
         self.listbox.bind_model(
             Some(&self.model),
-            clone!(@weak self as this => @default-panic, move |item| {
-                let row = row::Row::new(item.downcast_ref().unwrap());
-                row.upcast()
-            }),
+            clone!(
+                #[weak(rename_to = _this)]
+                self,
+                #[upgrade_or_panic]
+                move |item| {
+                    let row = row::Row::new(item.downcast_ref().unwrap());
+                    row.upcast()
+                }
+            ),
         );
 
-        self.infobar_close
-            .connect_clicked(clone!(@weak self as this => move |_| {
+        self.infobar_close.connect_clicked(clone!(
+            #[weak(rename_to = this)]
+            self,
+            move |_| {
                 this.infobar_revealer.set_reveal_child(false);
-            }));
+            }
+        ));
     }
 }
 
@@ -286,9 +301,14 @@ impl UsbRedir {
         }
 
         let item = Device::new();
-        item.connect_state_set(clone!(@weak self as this => move |device, state| {
-            this.obj().emit_by_name::<()>("device-state-set", &[device, &state]);
-        }));
+        item.connect_state_set(clone!(
+            #[weak(rename_to = this)]
+            self,
+            move |device, state| {
+                this.obj()
+                    .emit_by_name::<()>("device-state-set", &[device, &state]);
+            }
+        ));
         item.set_device(d);
         self.model.append(&item);
     }

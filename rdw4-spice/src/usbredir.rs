@@ -12,8 +12,12 @@ impl UsbRedir {
         let manager = spice::UsbDeviceManager::get(session)?;
 
         let redir = rdw::UsbRedir::new();
-        redir.model().connect_items_changed(
-            clone!(@weak manager, @weak redir => move |model, _pos, _rm, _add| {
+        redir.model().connect_items_changed(clone!(
+            #[weak]
+            manager,
+            #[weak]
+            redir,
+            move |model, _pos, _rm, _add| {
                 for dev in manager.devices().iter() {
                     if manager.is_device_connected(dev) {
                         if let Some(pos) = redir.find_item(|item| same_device(dev, item)) {
@@ -22,32 +26,48 @@ impl UsbRedir {
                         }
                     }
                 }
-            }),
-        );
+            }
+        ));
 
-        redir.connect_device_state_set(clone!(@weak session, @weak manager => move |redir, item, state| {
-            for dev in manager.devices().iter() {
-                if same_device(dev, item) {
-                    let dev = dev.clone();
-                    MainContext::default().spawn_local(clone!(@weak manager, @weak item, @weak redir => async move {
-                        match set_device_state(dev, manager, state).await {
-                            Ok(active) => item.set_property("active", active),
-                            Err(e) => {
-                                if state {
-                                    item.set_property("active", false);
+        redir.connect_device_state_set(clone!(
+            #[weak]
+            manager,
+            move |redir, item, state| {
+                for dev in manager.devices().iter() {
+                    if same_device(dev, item) {
+                        let dev = dev.clone();
+                        MainContext::default().spawn_local(clone!(
+                            #[weak]
+                            manager,
+                            #[weak]
+                            item,
+                            #[weak]
+                            redir,
+                            async move {
+                                match set_device_state(dev, manager, state).await {
+                                    Ok(active) => item.set_property("active", active),
+                                    Err(e) => {
+                                        if state {
+                                            item.set_property("active", false);
+                                        }
+                                        redir.emit_by_name::<bool>("show-error", &[&e.to_string()]);
+                                    }
                                 }
-                                redir.emit_by_name::<bool>("show-error",&[&e.to_string()]);
-                            },
-                        }
-                    }));
-                    break;
+                            }
+                        ));
+                        break;
+                    }
                 }
             }
-        }));
+        ));
 
-        manager.connect_device_error(clone!(@weak redir => move |_, _, e| {
-            redir.emit_by_name::<bool>("show-error",&[&e.to_string()]);
-        }));
+        manager.connect_device_error(clone!(
+            #[weak]
+            redir,
+            move |_, _, e| {
+                redir.emit_by_name::<bool>("show-error", &[&e.to_string()]);
+            }
+        ));
 
         let free_channels = manager.free_channels();
         log::debug!("free_channels: {}", free_channels);

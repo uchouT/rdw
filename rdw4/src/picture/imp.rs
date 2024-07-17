@@ -20,14 +20,20 @@ impl ObjectImpl for Picture {
         self.parent_constructed();
         self.obj().set_focusable(true);
 
-        self.paintable
-            .connect_invalidate_contents(clone!(@weak self as this => move |_| {
+        self.paintable.connect_invalidate_contents(clone!(
+            #[weak(rename_to = this)]
+            self,
+            move |_| {
                 this.obj().queue_draw();
-            }));
-        self.paintable
-            .connect_invalidate_size(clone!(@weak self as this => move |_| {
+            }
+        ));
+        self.paintable.connect_invalidate_size(clone!(
+            #[weak(rename_to = this)]
+            self,
+            move |_| {
                 this.obj().queue_resize();
-            }));
+            }
+        ));
     }
 }
 

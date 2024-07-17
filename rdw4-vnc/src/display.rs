@@ -90,8 +90,10 @@ pub(crate) mod imp {
 
             self.obj().set_mouse_absolute(true);
 
-            self.obj().connect_key_event(
-                clone!(@weak self as this => move |_, keyval, keycode, event| {
+            self.obj().connect_key_event(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, keyval, keycode, event| {
                     log::debug!("key-press: {:?}", (keyval, keycode));
                     if event.contains(rdw::KeyEvent::PRESS) {
                         this.key_event(true, keyval, keycode);
@@ -99,11 +101,13 @@ pub(crate) mod imp {
                     if event.contains(rdw::KeyEvent::RELEASE) {
                         this.key_event(false, keyval, keycode);
                     }
-                }),
-            );
+                }
+            ));
 
-            self.obj()
-                .connect_motion(clone!(@weak self as this => move |_, x, y| {
+            self.obj().connect_motion(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, x, y| {
                     log::debug!("motion: {:?}", (x, y));
                     this.last_motion.set(Some((x, y)));
                     if !this.obj().mouse_absolute() {
@@ -113,10 +117,13 @@ pub(crate) mod imp {
                     if let Err(e) = this.connection.pointer_event(button_mask, x as _, y as _) {
                         log::warn!("Failed to send pointer event: {}", e);
                     }
-                }));
+                }
+            ));
 
-            self.obj()
-                .connect_motion_relative(clone!(@weak self as this => move |_, dx, dy| {
+            self.obj().connect_motion_relative(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, dx, dy| {
                     log::debug!("motion-relative: {:?}", (dx, dy));
                     if this.obj().mouse_absolute() {
                         return;
@@ -126,34 +133,50 @@ pub(crate) mod imp {
                     if let Err(e) = this.connection.pointer_event(button_mask, dx as _, dy as _) {
                         log::warn!("Failed to send pointer event: {}", e);
                     }
-                }));
+                }
+            ));
 
-            self.obj()
-                .connect_mouse_press(clone!(@weak self as this => move |_, button| {
+            self.obj().connect_mouse_press(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, button| {
                     log::debug!("mouse-press: {:?}", button);
                     this.mouse_click(true, button);
-                }));
+                }
+            ));
 
-            self.obj()
-                .connect_mouse_release(clone!(@weak self as this => move |_, button| {
+            self.obj().connect_mouse_release(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, button| {
                     log::debug!("mouse-release: {:?}", button);
                     this.mouse_click(false, button);
-                }));
+                }
+            ));
 
-            self.obj()
-                .connect_scroll_discrete(clone!(@weak self as this => move |_, scroll| {
+            self.obj().connect_scroll_discrete(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, scroll| {
                     log::debug!("scroll-discrete: {:?}", scroll);
                     this.scroll(scroll);
-                }));
+                }
+            ));
 
-            self.obj().connect_resize_request(
-                clone!(@weak self as this => move |_, width, height, wmm, hmm| {
+            self.obj().connect_resize_request(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, width, height, wmm, hmm| {
                     let sf = this.obj().scale_factor() as u32;
                     let (width, height) = (width / sf, height / sf);
                     let status = this.connection.set_size(width, height);
-                    log::debug!("resize-request: {:?} -> {:?}", (width, height, wmm, hmm), status);
-                }),
-            );
+                    log::debug!(
+                        "resize-request: {:?} -> {:?}",
+                        (width, height, wmm, hmm),
+                        status
+                    );
+                }
+            ));
 
             self.connection.connect_vnc_auth_choose_type(|conn, va| {
                 use gvnc::ConnectionAuth::*;
@@ -183,107 +206,139 @@ pub(crate) mod imp {
                 conn.shutdown();
             });
 
-            self.connection
-                .connect_vnc_initialized(clone!(@weak self as this => move |conn| {
+            self.connection.connect_vnc_initialized(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |conn| {
                     if let Err(e) = this.on_initialized() {
                         log::warn!("Failed to initialize: {}", e);
                         conn.shutdown();
                     }
-                }));
+                }
+            ));
 
-            self.connection.connect_vnc_cursor_changed(clone!(@weak self as this => move |_, cursor| {
-                log::debug!("cursor-changed: {:?}", &cursor);
-                this.obj().define_cursor(
-                    cursor.map(|c|{
-                        let (w, h, hot_x, hot_y, data) = (c.width(), c.height(), c.hotx(), c.hoty(), c.data());
-                        rdw::Display::make_cursor(data, w.into(), h.into(), hot_x.into(), hot_y.into(), 1)
-                    })
-                );
-            }));
+            self.connection.connect_vnc_cursor_changed(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, cursor| {
+                    log::debug!("cursor-changed: {:?}", &cursor);
+                    this.obj().define_cursor(cursor.map(|c| {
+                        let (w, h, hot_x, hot_y, data) =
+                            (c.width(), c.height(), c.hotx(), c.hoty(), c.data());
+                        rdw::Display::make_cursor(
+                            data,
+                            w.into(),
+                            h.into(),
+                            hot_x.into(),
+                            hot_y.into(),
+                            1,
+                        )
+                    }));
+                }
+            ));
 
-            self.connection.connect_vnc_pointer_mode_changed(
-                clone!(@weak self as this => move |_, abs| {
+            self.connection.connect_vnc_pointer_mode_changed(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, abs| {
                     log::debug!("pointer-mode-changed: {}", abs);
                     this.obj().set_mouse_absolute(abs);
-                }),
-            );
+                }
+            ));
 
             self.connection.connect_vnc_server_cut_text(|_, text| {
                 log::debug!("server-cut-text: {}", text);
             });
 
-            self.connection.connect_vnc_framebuffer_update(
-                clone!(@weak self as this => move |_, x, y, w, h| {
+            self.connection.connect_vnc_framebuffer_update(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, x, y, w, h| {
                     log::debug!("framebuffer-update: {:?}", (x, y, w, h));
                     if let Some(fb) = &*this.fb.borrow() {
-                        let sub = fb.get_sub(
-                            x as _,
-                            y as _,
-                            w as _,
-                            h as _,
+                        let sub = fb.get_sub(x as _, y as _, w as _, h as _);
+                        this.obj().update_area(
+                            x,
+                            y,
+                            w,
+                            h,
+                            BaseFramebufferExt::width(fb) * 4,
+                            Some(sub),
                         );
-                        this.obj().update_area(x, y, w, h, BaseFramebufferExt::width(fb) * 4, Some(sub));
                     }
                     if let Err(e) = this.framebuffer_update_request(true) {
                         log::warn!("Failed to update framebuffer: {}", e);
                     }
-                }),
-            );
+                }
+            ));
 
-            self.connection.connect_vnc_desktop_resize(
-                clone!(@weak self as this => move |_, w, h| {
+            self.connection.connect_vnc_desktop_resize(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, w, h| {
                     log::debug!("desktop-resize: {:?}", (w, h));
                     this.do_framebuffer_init();
                     this.obj().set_display_size(Some((w as _, h as _)));
                     if let Err(e) = this.framebuffer_update_request(false) {
                         log::warn!("Failed to update framebuffer: {}", e);
                     }
-                }),
-            );
+                }
+            ));
 
             self.connection.connect_vnc_desktop_rename(|_, name| {
                 log::debug!("desktop-rename: {}", name);
             });
 
-            self.connection.connect_vnc_pixel_format_changed(
-                clone!(@weak self as this => move |_, format| {
+            self.connection.connect_vnc_pixel_format_changed(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, format| {
                     log::debug!("pixel-format-changed: {:?}", format);
                     this.do_framebuffer_init();
                     if let Err(e) = this.framebuffer_update_request(false) {
                         log::warn!("Failed to update framebuffer: {}", e);
                     }
-                }),
-            );
+                }
+            ));
 
             self.connection.connect_vnc_auth_credential(|_, va| {
                 log::debug!("auth-credential: {:?}", va);
             });
 
             // TODO: gvnc doesn't support EXT_CLIPBOARD 0xc0a1e5ce
-            self.connection.connect_vnc_server_cut_text(
-                clone!(@weak self as this => move |_, text| {
+            self.connection.connect_vnc_server_cut_text(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, text| {
                     if this.obj().read_only() {
                         return;
                     }
                     log::debug!("server-cut-text, {}", text);
                     this.obj().clipboard().set_text(text);
-                }),
-            );
+                }
+            ));
 
-            self.obj()
-                .clipboard()
-                .connect_changed(clone!(@weak self as this => move |_| {
+            self.obj().clipboard().connect_changed(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_| {
                     if this.obj().read_only() {
                         return;
                     }
-                    glib::MainContext::default().spawn_local(clone!(@weak this => async move {
-                        let Ok(Some(text)) = this.obj().clipboard().read_text_future().await else {
-                            return;
-                        };
-                        log::debug!("client-cut-text, {}", text);
-                        this.connection.client_cut_text(&text);
-                    }));
-                }));
+                    glib::MainContext::default().spawn_local(clone!(
+                        #[weak]
+                        this,
+                        async move {
+                            let Ok(Some(text)) = this.obj().clipboard().read_text_future().await
+                            else {
+                                return;
+                            };
+                            log::debug!("client-cut-text, {}", text);
+                            this.connection.client_cut_text(&text);
+                        }
+                    ));
+                }
+            ));
         }
     }
 

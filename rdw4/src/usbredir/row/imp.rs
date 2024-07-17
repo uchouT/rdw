@@ -67,13 +67,16 @@ impl ObjectImpl for Row {
             .sync_create()
             .build();
 
-        self.switch.connect_state_set(
-            clone!(@weak self as this => @default-panic, move |_s, state| {
+        self.switch.connect_state_set(clone!(
+            #[weak(rename_to = this)]
+            self,
+            #[upgrade_or_panic]
+            move |_s, state| {
                 let device = this.obj().device();
                 device.emit_by_name::<()>("state-set", &[&state]);
                 glib::Propagation::Stop
-            }),
-        );
+            }
+        ));
     }
 
     // Needed for direct subclasses of GtkWidget;

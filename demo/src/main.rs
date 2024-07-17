@@ -89,39 +89,60 @@ fn rdp_display(app: &adw::Application, uri: glib::Uri) -> rdw::Display {
     })
     .unwrap();
 
-    rdp.connect_rdp_authenticate(clone!(@weak app => @default-return false, move |rdp| {
-        glib::MainContext::default().block_on(clone!(@weak app => @default-return false, async move {
-            if let Some((username, password)) = show_password_dialog(app, true, true).await {
-                let _ = rdp.with_settings(|s| {
-                    s.set_username(Some(&username))?;
-                    s.set_password(Some(&password))?;
-                    Ok(())
-                });
-                true
-            } else {
-                false
-            }
-        }))
-    }));
+    rdp.connect_rdp_authenticate(clone!(
+        #[weak]
+        app,
+        #[upgrade_or]
+        false,
+        move |rdp| {
+            glib::MainContext::default().block_on(clone!(
+                #[weak]
+                app,
+                #[upgrade_or]
+                false,
+                async move {
+                    if let Some((username, password)) = show_password_dialog(app, true, true).await
+                    {
+                        let _ = rdp.with_settings(|s| {
+                            s.set_username(Some(&username))?;
+                            s.set_password(Some(&password))?;
+                            Ok(())
+                        });
+                        true
+                    } else {
+                        false
+                    }
+                }
+            ))
+        }
+    ));
 
     rdp.connect_notify_local(
         Some("rdp-connected"),
-        clone!(@weak app => move |rdp, _| {
-            let connected = rdp.property::<bool>("rdp-connected");
-            log::debug!("Connected: {connected:?}");
-            if !connected {
+        clone!(
+            #[weak]
+            app,
+            move |rdp, _| {
+                let connected = rdp.property::<bool>("rdp-connected");
+                log::debug!("Connected: {connected:?}");
+                if !connected {
+                    log::warn!("Last error: {:?}", rdp.last_error());
+                    app.quit();
+                }
+            }
+        ),
+    );
+
+    glib::MainContext::default().block_on(clone!(
+        #[weak]
+        rdp,
+        async move {
+            if rdp.rdp_connect().await.is_err() {
                 log::warn!("Last error: {:?}", rdp.last_error());
                 app.quit();
             }
-        }),
-    );
-
-    glib::MainContext::default().block_on(clone!(@weak rdp => async move {
-        if rdp.rdp_connect().await.is_err() {
-            log::warn!("Last error: {:?}", rdp.last_error());
-            app.quit();
         }
-    }));
+    ));
     rdp.upcast()
 }
 
@@ -139,39 +160,63 @@ fn vnc_display(app: &adw::Application, uri: glib::Uri) -> rdw::Display {
         .unwrap();
 
     let has_error2 = has_error.clone();
-    vnc.connection()
-        .connect_vnc_error(clone!(@weak app => move |_, msg| {
+    vnc.connection().connect_vnc_error(clone!(
+        #[weak]
+        app,
+        move |_, msg| {
             has_error2.store(true, Ordering::Relaxed);
             show_error(app, msg);
-        }));
+        }
+    ));
 
-    vnc.connection()
-        .connect_vnc_disconnected(clone!(@weak app => move |_| {
+    vnc.connection().connect_vnc_disconnected(clone!(
+        #[weak]
+        app,
+        move |_| {
             if !has_error.load(Ordering::Relaxed) {
                 app.quit();
             }
-        }));
+        }
+    ));
 
-    vnc
-        .connection()
-        .connect_vnc_auth_credential(clone!(@weak app => move |conn, va|{
+    vnc.connection().connect_vnc_auth_credential(clone!(
+        #[weak]
+        app,
+        move |conn, va| {
             use gvnc::ConnectionCredential::*;
 
-            let creds: Vec<_> = va.iter().map(|v| v.get::<gvnc::ConnectionCredential>().unwrap()).collect();
-            glib::MainContext::default().spawn_local(clone!(@weak conn => async move {
-                if let Some((username, password)) = show_password_dialog(app, creds.contains(&Username), creds.contains(&Password)).await {
-                    if creds.contains(&Username) {
-                        conn.set_credential(Username.into_glib(), &username).unwrap();
-                    }
-                    if creds.contains(&Password) {
-                        conn.set_credential(Password.into_glib(), &password).unwrap();
-                    }
-                    if creds.contains(&Clientname) {
-                        conn.set_credential(Clientname.into_glib(), "rdw-vnc").unwrap();
+            let creds: Vec<_> = va
+                .iter()
+                .map(|v| v.get::<gvnc::ConnectionCredential>().unwrap())
+                .collect();
+            glib::MainContext::default().spawn_local(clone!(
+                #[weak]
+                conn,
+                async move {
+                    if let Some((username, password)) = show_password_dialog(
+                        app,
+                        creds.contains(&Username),
+                        creds.contains(&Password),
+                    )
+                    .await
+                    {
+                        if creds.contains(&Username) {
+                            conn.set_credential(Username.into_glib(), &username)
+                                .unwrap();
+                        }
+                        if creds.contains(&Password) {
+                            conn.set_credential(Password.into_glib(), &password)
+                                .unwrap();
+                        }
+                        if creds.contains(&Clientname) {
+                            conn.set_credential(Clientname.into_glib(), "rdw-vnc")
+                                .unwrap();
+                        }
                     }
                 }
-            }));
-        }));
+            ));
+        }
+    ));
 
     vnc.upcast()
 }
@@ -182,22 +227,34 @@ fn spice_display(app: &adw::Application, uri: glib::Uri) -> rdw::Display {
 
     session.set_uri(Some(&uri.to_string()));
 
-    session.connect_channel_new(clone!(@weak app => move |_, channel| {
-        if let Ok(main) = channel.clone().downcast::<spice::MainChannel>() {
-            main.connect_channel_event(clone!(@weak app => move |channel, event| {
-                use spice::ChannelEvent::*;
-                if event == ErrorConnect {
-                    if let Some(err) = channel.error() {
-                        show_error(app, &err.to_string());
+    session.connect_channel_new(clone!(
+        #[weak]
+        app,
+        move |_, channel| {
+            if let Ok(main) = channel.clone().downcast::<spice::MainChannel>() {
+                main.connect_channel_event(clone!(
+                    #[weak]
+                    app,
+                    move |channel, event| {
+                        use spice::ChannelEvent::*;
+                        if event == ErrorConnect {
+                            if let Some(err) = channel.error() {
+                                show_error(app, &err.to_string());
+                            }
+                        }
                     }
-                }
-            }));
+                ));
+            }
         }
-    }));
+    ));
 
-    session.connect_disconnected(clone!(@weak app => move |_| {
-        app.quit();
-    }));
+    session.connect_disconnected(clone!(
+        #[weak]
+        app,
+        move |_| {
+            app.quit();
+        }
+    ));
 
     session.connect();
     spice.upcast()
@@ -281,32 +338,40 @@ fn main() {
     });
 
     let action_quit = gio::SimpleAction::new("quit", None);
-    action_quit.connect_activate(clone!(@weak app => move |_, _| {
-        app.quit();
-    }));
+    action_quit.connect_activate(clone!(
+        #[weak]
+        app,
+        move |_, _| {
+            app.quit();
+        }
+    ));
     app.add_action(&action_quit);
 
     let action_usb = gio::SimpleAction::new("usb", None);
     let dpy = display.clone();
-    action_usb.connect_activate(clone!(@weak app => move |_, _| {
-        let display = match &*dpy.borrow() {
-            Some(display) => display.clone(),
-            _ => return,
-        };
-
-        if let Ok(spice) = display.downcast::<rdw_spice::Display>() {
-            let usbredir = match rdw_spice::UsbRedir::build(&spice.session()) {
-                Ok(it) => it,
-                Err(e) => {
-                    panic!("Failed to open USB dialog: {}", e);
-                }
+    action_usb.connect_activate(clone!(
+        #[weak]
+        app,
+        move |_, _| {
+            let display = match &*dpy.borrow() {
+                Some(display) => display.clone(),
+                _ => return,
             };
-            let dialog = gtk::Window::new();
-            dialog.set_transient_for(app.active_window().as_ref());
-            dialog.set_child(Some(&usbredir));
-            dialog.set_visible(true);
+
+            if let Ok(spice) = display.downcast::<rdw_spice::Display>() {
+                let usbredir = match rdw_spice::UsbRedir::build(&spice.session()) {
+                    Ok(it) => it,
+                    Err(e) => {
+                        panic!("Failed to open USB dialog: {}", e);
+                    }
+                };
+                let dialog = gtk::Window::new();
+                dialog.set_transient_for(app.active_window().as_ref());
+                dialog.set_child(Some(&usbredir));
+                dialog.set_visible(true);
+            }
         }
-    }));
+    ));
     app.add_action(&action_usb);
 
     app.connect_activate(move |app| {
@@ -326,13 +391,22 @@ fn build_ui(app: &adw::Application, display: Arc<RefCell<Option<rdw::Display>>>)
 
     if let Some(display) = &*display.borrow() {
         display.set_vexpand(true);
-        display.connect_property_grabbed_notify(clone!(@weak window => move |d| {
-            let mut title = "rdw demo".to_string();
-            if !d.grabbed().is_empty() {
-                title = format!("{} - {}", title, d.grab_shortcut().to_label(&gdk::Display::default().unwrap()))
+        display.connect_property_grabbed_notify(clone!(
+            #[weak]
+            window,
+            move |d| {
+                let mut title = "rdw demo".to_string();
+                if !d.grabbed().is_empty() {
+                    title = format!(
+                        "{} - {}",
+                        title,
+                        d.grab_shortcut()
+                            .to_label(&gdk::Display::default().unwrap())
+                    )
+                }
+                window.set_title(Some(title.as_str()));
             }
-            window.set_title(Some(title.as_str()));
-        }));
+        ));
 
         let view: gtk::Box = builder.object("view").expect("Couldn't get view");
         view.append(display);

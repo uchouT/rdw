@@ -100,44 +100,66 @@ impl ObjectImpl for Display {
         });
 
         let ec = gtk::EventControllerFocus::new();
-        ec.connect_leave(clone!(@weak self as this => @default-panic, move |_ec| {
-            this.delayed_grab_shortcut.set(false);
-            this.release_keys();
-        }));
+        ec.connect_leave(clone!(
+            #[weak(rename_to = this)]
+            self,
+            #[upgrade_or_panic]
+            move |_ec| {
+                this.delayed_grab_shortcut.set(false);
+                this.release_keys();
+            }
+        ));
         self.obj().add_controller(ec);
 
         let ec = gtk::EventControllerKey::new();
         ec.set_propagation_phase(gtk::PropagationPhase::Capture);
-        ec.connect_key_pressed(
-            clone!(@weak self as this => @default-panic, move |ec, keyval, keycode, _state| {
+        ec.connect_key_pressed(clone!(
+            #[weak(rename_to = this)]
+            self,
+            #[upgrade_or_panic]
+            move |ec, keyval, keycode, _state| {
                 this.key_pressed(ec, keyval, keycode);
                 glib::Propagation::Stop
-            }),
-        );
-        ec.connect_key_released(
-            clone!(@weak self as this => @default-panic, move |ec, keyval, keycode, _state| {
+            }
+        ));
+        ec.connect_key_released(clone!(
+            #[weak(rename_to = this)]
+            self,
+            #[upgrade_or_panic]
+            move |ec, keyval, keycode, _state| {
                 this.key_released(ec, keyval, keycode);
-            }),
-        );
+            }
+        ));
         self.obj().add_controller(ec);
 
         let ec = gtk::EventControllerMotion::new();
-        ec.connect_motion(clone!(@weak self as this => move |_, x, y| {
-            this.do_motion(x, y)
-        }));
-        ec.connect_enter(clone!(@weak self as this => move |_, x, y| {
-            this.do_motion(x, y)
-        }));
-        ec.connect_leave(clone!(@weak self as this => move |_| {
-            log::debug!("leave -> ungrab mouse");
-            this.ungrab_mouse();
-        }));
+        ec.connect_motion(clone!(
+            #[weak(rename_to = this)]
+            self,
+            move |_, x, y| this.do_motion(x, y)
+        ));
+        ec.connect_enter(clone!(
+            #[weak(rename_to = this)]
+            self,
+            move |_, x, y| this.do_motion(x, y)
+        ));
+        ec.connect_leave(clone!(
+            #[weak(rename_to = this)]
+            self,
+            move |_| {
+                log::debug!("leave -> ungrab mouse");
+                this.ungrab_mouse();
+            }
+        ));
         self.picture.add_controller(ec);
 
         let ec = gtk::GestureClick::new();
         ec.set_button(0);
-        ec.connect_pressed(
-            clone!(@weak self as this => @default-panic, move |gesture, _n_press, x, y| {
+        ec.connect_pressed(clone!(
+            #[weak(rename_to = this)]
+            self,
+            #[upgrade_or_panic]
+            move |gesture, _n_press, x, y| {
                 let grabbed = this.try_grab();
 
                 if grabbed.contains(Grab::MOUSE) {
@@ -148,26 +170,35 @@ impl ObjectImpl for Display {
                 let button = gesture.current_button();
                 this.do_motion(x, y);
                 this.do_mouse_press(button);
-            }),
-        );
-        ec.connect_released(
-            clone!(@weak self as this => move |gesture, _n_press, x, y| {
+            }
+        ));
+        ec.connect_released(clone!(
+            #[weak(rename_to = this)]
+            self,
+            move |gesture, _n_press, x, y| {
                 let button = gesture.current_button();
                 this.do_motion(x, y);
                 this.do_mouse_release(button);
-            }),
-        );
-        ec.connect_cancel(clone!(@weak self as this => move |gesture, _| {
-            let button = gesture.current_button();
-            this.do_mouse_release(button);
-        }));
+            }
+        ));
+        ec.connect_cancel(clone!(
+            #[weak(rename_to = this)]
+            self,
+            move |gesture, _| {
+                let button = gesture.current_button();
+                this.do_mouse_release(button);
+            }
+        ));
         self.picture.add_controller(ec);
 
         let ec = gtk::EventControllerScroll::new(
             gtk::EventControllerScrollFlags::BOTH_AXES | gtk::EventControllerScrollFlags::DISCRETE,
         );
-        ec.connect_scroll(
-            clone!(@weak self as this => @default-panic, move |_, dx, dy| {
+        ec.connect_scroll(clone!(
+            #[weak(rename_to = this)]
+            self,
+            #[upgrade_or_panic]
+            move |_, dx, dy| {
                 if dy >= 1.0 {
                     this.do_scroll_discrete(Scroll::Down);
                 } else if dy <= -1.0 {
@@ -179,8 +210,8 @@ impl ObjectImpl for Display {
                     this.do_scroll_discrete(Scroll::Left);
                 }
                 glib::Propagation::Proceed
-            }),
-        );
+            }
+        ));
         self.picture.add_controller(ec);
     }
 
@@ -377,23 +408,37 @@ impl WidgetImpl for Display {
             timeout_id.remove();
         }
         self.resize_timeout_id.set(Some(glib::timeout_add_local(
-                Duration::from_millis(500),
-                clone!(@weak self as this => @default-return glib::ControlFlow::Break, move || {
+            Duration::from_millis(500),
+            clone!(
+                #[weak(rename_to = this)]
+                self,
+                #[upgrade_or]
+                glib::ControlFlow::Break,
+                move || {
                     let sf = this.obj().scale_factor() as u32;
                     let width = width as u32 * sf;
                     let height = height as u32 * sf;
-                    let (w_mm, h_mm) = this.surface()
-                                   .as_ref()
-                                   .and_then(|s| gdk::prelude::DisplayExt::monitor_at_surface(&this.obj().display(), s))
-                                   .map(|m| {
-                                       let (geom, wmm, hmm) = (m.geometry(), m.width_mm() as u32, m.height_mm() as u32);
-                                       (wmm * width / (geom.width() as u32), hmm * height / geom.height() as u32)
-                                   }).unwrap_or((0u32, 0u32));
+                    let (w_mm, h_mm) = this
+                        .surface()
+                        .as_ref()
+                        .and_then(|s| {
+                            gdk::prelude::DisplayExt::monitor_at_surface(&this.obj().display(), s)
+                        })
+                        .map(|m| {
+                            let (geom, wmm, hmm) =
+                                (m.geometry(), m.width_mm() as u32, m.height_mm() as u32);
+                            (
+                                wmm * width / (geom.width() as u32),
+                                hmm * height / geom.height() as u32,
+                            )
+                        })
+                        .unwrap_or((0u32, 0u32));
                     this.do_resize_request(width, height, w_mm, h_mm);
                     this.resize_timeout_id.set(None);
                     glib::ControlFlow::Break
-                }),
-            )));
+                }
+            ),
+        )));
 
         let (x, y, w, h) = self.paintable_area();
         self.picture
@@ -680,13 +725,19 @@ impl Display {
         // synthesize press-and-release if within the synthesize-delay boundary, else emit
         self.last_key_press.set(Some((keyval, keycode)));
         self.last_key_press_timeout
-                .set(Some(glib::timeout_add_local(
-                    Duration::from_millis(self.synthesize_delay.get() as _),
-                    glib::clone!(@weak self as this => @default-return glib::ControlFlow::Break, move || {
+            .set(Some(glib::timeout_add_local(
+                Duration::from_millis(self.synthesize_delay.get() as _),
+                glib::clone!(
+                    #[weak(rename_to = this)]
+                    self,
+                    #[upgrade_or]
+                    glib::ControlFlow::Break,
+                    move || {
                         this.emit_last_key_press();
                         glib::ControlFlow::Break
-                    }),
-                )));
+                    }
+                ),
+            )));
     }
 
     fn key_released(&self, _ec: &gtk::EventControllerKey, keyval: gdk::Key, keycode: u32) {
@@ -732,8 +783,11 @@ impl Display {
         #[cfg(windows)]
         self.win32.grab_keyboard();
 
-        let id = toplevel.connect_shortcuts_inhibited_notify(
-            clone!(@weak self as this => @default-panic, move |toplevel| {
+        let id = toplevel.connect_shortcuts_inhibited_notify(clone!(
+            #[weak(rename_to = this)]
+            self,
+            #[upgrade_or_panic]
+            move |toplevel| {
                 let inhibited = toplevel.is_shortcuts_inhibited();
                 log::debug!("shortcuts-inhibited: {}", inhibited);
                 if !inhibited {
@@ -741,8 +795,8 @@ impl Display {
                     toplevel.disconnect(id.unwrap());
                     this.ungrab_keyboard();
                 }
-            }),
-        );
+            }
+        ));
         self.shortcuts_inhibited_id.set(Some(id));
         true
     }

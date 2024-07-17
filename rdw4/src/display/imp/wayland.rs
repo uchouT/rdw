@@ -62,12 +62,17 @@ impl Helper {
         });
 
         self.queue.replace(Some(queue.handle()));
-        glib::MainContext::default().spawn_local(
-            glib::clone!(@weak display => @default-panic, async move {
+        glib::MainContext::default().spawn_local(glib::clone!(
+            #[weak]
+            display,
+            #[upgrade_or_panic]
+            async move {
                 let mut obj = display.clone();
-                std::future::poll_fn(|cx| queue.poll_dispatch_pending(cx, &mut obj)).await.unwrap();
-            }),
-        );
+                std::future::poll_fn(|cx| queue.poll_dispatch_pending(cx, &mut obj))
+                    .await
+                    .unwrap();
+            }
+        ));
         self.source.set(Some(source))
     }
 
