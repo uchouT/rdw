@@ -19,16 +19,25 @@ impl Handler {
         let usbredir = self.usbredir.clone();
         widget
             .model()
-            .connect_items_changed(clone!(@weak widget => move |model, pos, _rm, add| {
+            .connect_items_changed(clone!(move |model, pos, _rm, add| {
                 let usbredir = usbredir.clone();
-                MainContext::default().spawn_local(clone!(@weak model => async move {
-                    for pos in pos..pos + add {
-                        let item = model.item(pos).unwrap();
-                        if let Some(dev) = item.downcast_ref::<rdw::UsbDevice>().unwrap().device() {
-                            item.set_property("active", usbredir.is_device_connected(&dev).await);
+                MainContext::default().spawn_local(clone!(
+                    #[weak]
+                    model,
+                    async move {
+                        for pos in pos..pos + add {
+                            let item = model.item(pos).unwrap();
+                            if let Some(dev) =
+                                item.downcast_ref::<rdw::UsbDevice>().unwrap().device()
+                            {
+                                item.set_property(
+                                    "active",
+                                    usbredir.is_device_connected(&dev).await,
+                                );
+                            }
                         }
                     }
-                }));
+                ));
             }));
 
         let usbredir = self.usbredir.clone();
@@ -39,29 +48,38 @@ impl Handler {
             };
 
             let usbredir = usbredir.clone();
-            MainContext::default().spawn_local(clone!(@weak item, @weak widget => async move {
-                match usbredir.set_device_state(&device, state).await {
-                    Ok(active) => item.set_property("active", active),
-                    Err(e) => {
-                        if state {
-                            item.set_property("active", false);
+            MainContext::default().spawn_local(clone!(
+                #[weak]
+                item,
+                #[weak]
+                widget,
+                async move {
+                    match usbredir.set_device_state(&device, state).await {
+                        Ok(active) => item.set_property("active", active),
+                        Err(e) => {
+                            if state {
+                                item.set_property("active", false);
+                            }
+                            widget.emit_by_name::<bool>("show-error", &[&e.to_string()]);
                         }
-                        widget.emit_by_name::<bool>("show-error", &[&e.to_string()]);
-                    },
+                    }
                 }
-            }));
+            ));
         });
 
         let usbredir = self.usbredir.clone();
-        MainContext::default().spawn_local(clone!(@weak widget => async move {
-            use futures::stream::StreamExt; // for `next`
-            widget
-                .set_property("free-channels", usbredir.n_free_channels().await);
-            let mut n = usbredir.receive_n_free_channels().await;
-            while let Some(n) = n.next().await {
-                widget.set_property("free-channels", n);
+        MainContext::default().spawn_local(clone!(
+            #[weak]
+            widget,
+            async move {
+                use futures::stream::StreamExt; // for `next`
+                widget.set_property("free-channels", usbredir.n_free_channels().await);
+                let mut n = usbredir.receive_n_free_channels().await;
+                while let Some(n) = n.next().await {
+                    widget.set_property("free-channels", n);
+                }
             }
-        }));
+        ));
 
         widget
     }

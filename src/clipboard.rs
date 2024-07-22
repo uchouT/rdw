@@ -62,8 +62,10 @@ impl ClipboardHandler for InnerHandler {
 
                 let p = p.clone();
                 let mime = mime.to_string();
-                Some(Box::pin(
-                    clone!(@strong stream => @default-return panic!(), async move {
+                Some(Box::pin(clone!(
+                    #[strong]
+                    stream,
+                    async move {
                         match p.request(selection, &[&mime]).await {
                             Ok((_, data)) => {
                                 let bytes = glib::Bytes::from(&data);
@@ -75,8 +77,8 @@ impl ClipboardHandler for InnerHandler {
                                 Err(glib::Error::new(gio::IOErrorEnum::Failed, &err))
                             }
                         }
-                    }),
-                ))
+                    }
+                )))
             });
 
             if let Err(e) = clipboard.set_content(Some(&content)) {
