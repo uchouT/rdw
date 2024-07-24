@@ -61,7 +61,7 @@ async fn display_from_opt(opt: Rc<RefCell<AppOptions>>) -> Option<Display<'stati
     });
 
     if opt.borrow().list {
-        let list = Display::by_name(&conn).await.unwrap();
+        let list = Display::list_by_name(&conn).await.unwrap();
         for (name, dest) in list {
             println!("{} (at {})", name, dest);
         }
@@ -204,11 +204,11 @@ impl App {
                     }
                 };
                 let disp = display.clone();
+                let app = app_clone.clone();
                 MainContext::default().spawn_local(async move {
                     let mut changed = disp.receive_owner_changed().await.unwrap();
-                    while let Some(name) = changed.next().await {
-                        dbg!(name);
-                    }
+                    let _ = changed.next().await;
+                    app.inner.app.quit();
                 });
 
                 let console = Console::new(
