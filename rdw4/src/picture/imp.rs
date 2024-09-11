@@ -4,7 +4,6 @@ use glib::clone;
 #[derive(Debug, Default)]
 pub struct Picture {
     pub(crate) paintable: Paintable,
-    y_inverted: bool,
 }
 
 /// cbindgen:ignore
@@ -44,16 +43,7 @@ impl WidgetImpl for Picture {
 
     fn snapshot(&self, snapshot: &gtk::Snapshot) {
         let (w, h) = (self.obj().width() as _, self.obj().height() as _);
-
-        if !self.y_inverted {
-            self.paintable.snapshot(snapshot, w, h);
-        } else {
-            snapshot.save();
-            snapshot.translate(&graphene::Point::new(0.0, h as _));
-            snapshot.scale(1.0, -1.0);
-            self.paintable.snapshot(snapshot, w, h);
-            snapshot.restore();
-        }
+        self.paintable.snapshot(snapshot, w, h);
     }
 
     fn measure(&self, orientation: gtk::Orientation, for_size: i32) -> (i32, i32, i32, i32) {

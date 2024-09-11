@@ -11,6 +11,7 @@ pub struct Paintable {
     texture: RefCell<Option<gdk::Texture>>,
     texture_id: Cell<Option<gl::types::GLuint>>,
     use_rgb: Cell<bool>,
+    y0_top: Cell<Option<bool>>,
 
     #[cfg(windows)]
     pub(crate) win32: win32::Helper,
@@ -50,10 +51,22 @@ impl PaintableImpl for Paintable {
 
     fn snapshot(&self, snapshot: &gdk::Snapshot, width: f64, height: f64) {
         if let Some(texture) = self.texture.borrow().as_ref() {
-            snapshot.append_texture(
-                texture,
-                &graphene::Rect::new(0.0, 0.0, width as _, height as _),
-            );
+            let y_inverted = self.y0_top.get().unwrap_or(true);
+            if y_inverted {
+                snapshot.save();
+                snapshot.translate(&graphene::Point::new(0.0, height as _));
+                snapshot.scale(1.0, -1.0);
+                snapshot.append_texture(
+                    texture,
+                    &graphene::Rect::new(0.0, 0.0, width as _, height as _),
+                );
+                snapshot.restore();
+            } else {
+                snapshot.append_texture(
+                    texture,
+                    &graphene::Rect::new(0.0, 0.0, width as _, height as _),
+                );
+            }
         }
     }
 }
@@ -300,6 +313,7 @@ impl Paintable {
             s.height as _,
         ));
 
+        self.y0_top.set(Some(s.y0_top));
         self.update_texture(Some((s.width as _, s.height as _)), Some(&region))?;
         Ok(())
     }
