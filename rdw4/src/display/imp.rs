@@ -93,6 +93,8 @@ impl ObjectImpl for Display {
     fn constructed(&self) {
         self.parent_constructed();
         self.obj().set_focusable(true);
+        self.picture.set_hexpand(true);
+        self.picture.set_vexpand(true);
         self.picture.set_parent(self.obj().as_ref());
 
         self.grab_shortcut.get_or_init(|| {
