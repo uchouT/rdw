@@ -13,7 +13,8 @@ use freerdp::{
     locale::keyboard_init_ex,
     update, RdpError, Result, PIXEL_FORMAT_BGRA32,
 };
-use futures::{executor::block_on, SinkExt};
+use futures_executor::block_on;
+use futures_util::SinkExt;
 
 use crate::util::mime_from_format;
 
@@ -259,11 +260,11 @@ impl CliprdrHandler for RdpClipHandler {
 
 #[derive(Clone, Debug)]
 pub(crate) struct RdpContextHandler {
-    tx: futures::channel::mpsc::UnboundedSender<RdpEvent>,
+    tx: futures_channel::mpsc::UnboundedSender<RdpEvent>,
 }
 
 impl RdpContextHandler {
-    pub(crate) fn new(tx: futures::channel::mpsc::UnboundedSender<RdpEvent>) -> Self {
+    pub(crate) fn new(tx: futures_channel::mpsc::UnboundedSender<RdpEvent>) -> Self {
         Self { tx }
     }
 

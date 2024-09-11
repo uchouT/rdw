@@ -1,4 +1,4 @@
-use futures::StreamExt;
+use futures_util::StreamExt;
 use gst::prelude::*;
 use gst_audio::prelude::*;
 use std::{collections::HashMap, default::Default, error::Error};
