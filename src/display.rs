@@ -2,9 +2,11 @@ use futures_util::StreamExt;
 use glib::{clone, subclass::prelude::*, MainContext};
 use gtk::glib;
 use once_cell::sync::OnceCell;
-use qemu_display::{Console, ConsoleListenerHandler};
 #[cfg(windows)]
-use qemu_display::{ConsoleListenerD3d11Handler, ConsoleListenerMapHandler};
+use qemu_display::ConsoleListenerD3d11Handler;
+#[cfg(any(windows, unix))]
+use qemu_display::ConsoleListenerMapHandler;
+use qemu_display::{Console, ConsoleListenerHandler};
 use rdw::{gtk, DisplayExt};
 use std::cell::Cell;
 #[cfg(unix)]
@@ -13,10 +15,12 @@ use std::os::unix::io::IntoRawFd;
 mod imp {
     use super::*;
     use gtk::subclass::prelude::*;
-    #[cfg(windows)]
+    use qemu_display::{memmap2::Mmap, util::mmap};
+    #[cfg(any(windows, unix))]
     use std::cell::RefCell;
     #[cfg(windows)]
     use std::ffi::c_void;
+    use std::os::fd::AsRawFd;
     #[cfg(windows)]
     use windows::Win32::Foundation::{CloseHandle, HANDLE};
 
@@ -80,6 +84,8 @@ mod imp {
     pub struct Display {
         pub(crate) console: OnceCell<Console>,
         keymap: Cell<Option<&'static [u16]>>,
+        #[cfg(unix)]
+        scanout_map: RefCell<Option<(Mmap, u32)>>,
         #[cfg(windows)]
         scanout_map: RefCell<Option<(MemoryMap, u32)>>,
     }
@@ -275,11 +281,10 @@ mod imp {
                     let (sender, mut receiver) = futures::channel::mpsc::unbounded();
                     let handler = ConsoleHandler { sender };
                     console.register_listener(handler.clone()).await.unwrap();
+                    #[cfg(any(windows, unix))]
+                    console.set_map_listener(handler.clone()).await.unwrap();
                     #[cfg(windows)]
-                    {
-                        console.set_map_listener(handler.clone()).await.unwrap();
-                        console.set_d3d11_listener(handler.clone()).await.unwrap();
-                    }
+                    console.set_d3d11_listener(handler.clone()).await.unwrap();
 
                     MainContext::default().spawn_local(clone!(
                         #[weak]
@@ -318,28 +323,79 @@ mod imp {
                                             Some(&u.data),
                                         );
                                     }
+                                    #[cfg(unix)]
+                                    ScanoutMap { scanout, wait_tx } => {
+                                        log::debug!("{scanout:?}");
+                                        if scanout.format != 0x20020888 {
+                                            log::warn!(
+                                                "Format not yet supported: {:X}",
+                                                scanout.format
+                                            );
+                                            continue;
+                                        }
+                                        let map = unsafe {
+                                            mmap(
+                                                scanout.fd.as_raw_fd(),
+                                                scanout.height as usize * scanout.stride as usize,
+                                                scanout.offset.into(),
+                                            )
+                                        }
+                                        .unwrap();
+                                        this.obj().set_display_size(Some((
+                                            scanout.width as _,
+                                            scanout.height as _,
+                                        )));
+                                        this.scanout_map.replace(Some((map, scanout.stride)));
+                                        let _ = wait_tx.send(());
+                                    }
+                                    #[cfg(unix)]
+                                    UpdateMap(u) => {
+                                        log::debug!("{u:?}");
+                                        let scanout_map = this.scanout_map.borrow();
+                                        let Some((map, stride)) = scanout_map.as_ref() else {
+                                            log::warn!("No mapped scanout!");
+                                            continue;
+                                        };
+                                        let stride = *stride;
+                                        let bytes = map.as_ref();
+                                        this.obj().update_area(
+                                            u.x as _,
+                                            u.y as _,
+                                            u.w as _,
+                                            u.h as _,
+                                            stride as _,
+                                            Some(
+                                                &bytes[u.y as usize * stride as usize
+                                                    + u.x as usize * 4..],
+                                            ),
+                                        );
+                                    }
                                     #[cfg(windows)]
-                                    ScanoutMap(s) => {
+                                    ScanoutMap { scanout, wait_tx } => {
                                         use windows::Win32::System::Memory::{
                                             MapViewOfFile, FILE_MAP_READ,
                                         };
 
                                         log::debug!("{s:?}");
-                                        if s.format != 0x20020888 {
-                                            log::warn!("Format not yet supported: {:X}", s.format);
+                                        if scanout.format != 0x20020888 {
+                                            log::warn!(
+                                                "Format not yet supported: {:X}",
+                                                scanout.format
+                                            );
                                             continue;
                                         }
 
-                                        let handle = HANDLE(s.handle as _);
-                                        let size = s.height as usize * s.stride as usize;
-                                        let offset = s.offset as isize;
+                                        let handle = HANDLE(scanout.handle as _);
+                                        let size =
+                                            scanout.height as usize * scanout.stride as usize;
+                                        let offset = scanout.offset as isize;
                                         let ptr = unsafe {
                                             MapViewOfFile(
                                                 handle,
                                                 FILE_MAP_READ,
                                                 0,
                                                 0,
-                                                s.offset as usize + size,
+                                                scanout.offset as usize + size,
                                             )
                                         };
                                         if ptr.is_null() {
@@ -353,17 +409,20 @@ mod imp {
                                             offset,
                                             size,
                                         };
-                                        this.obj()
-                                            .set_display_size(Some((s.width as _, s.height as _)));
+                                        this.obj().set_display_size(Some((
+                                            scanout.width as _,
+                                            scanout.height as _,
+                                        )));
                                         this.obj().update_area(
                                             0,
                                             0,
-                                            s.width as _,
-                                            s.height as _,
-                                            s.stride as _,
+                                            scanout.width as _,
+                                            scanout.height as _,
+                                            scanout.stride as _,
                                             Some(map.as_bytes()),
                                         );
-                                        this.scanout_map.replace(Some((map, s.stride)));
+                                        this.scanout_map.replace(Some((map, scanout.stride)));
+                                        let _ = wait_tx.send(());
                                     }
                                     #[cfg(windows)]
                                     UpdateMap(u) => {
@@ -504,9 +563,12 @@ impl Display {
 enum ConsoleEvent {
     Scanout(qemu_display::Scanout),
     Update(qemu_display::Update),
-    #[cfg(windows)]
-    ScanoutMap(qemu_display::ScanoutMap),
-    #[cfg(windows)]
+    #[cfg(any(windows, unix))]
+    ScanoutMap {
+        scanout: qemu_display::ScanoutMap,
+        wait_tx: futures::channel::oneshot::Sender<()>,
+    },
+    #[cfg(any(windows, unix))]
     UpdateMap(qemu_display::UpdateMap),
     #[cfg(windows)]
     ScanoutD3dTexture2d(qemu_display::ScanoutD3dTexture2d),
@@ -541,15 +603,17 @@ impl ConsoleHandler {
     }
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, unix))]
 #[async_trait::async_trait]
 impl ConsoleListenerMapHandler for ConsoleHandler {
-    #[cfg(windows)]
     async fn scanout_map(&mut self, scanout: qemu_display::ScanoutMap) {
-        self.send(ConsoleEvent::ScanoutMap(scanout));
+        let (wait_tx, wait_rx) = futures::channel::oneshot::channel();
+        self.send(ConsoleEvent::ScanoutMap { scanout, wait_tx });
+        if let Err(e) = wait_rx.await {
+            log::warn!("wait update d3d texture2d failed: {}", e);
+        }
     }
 
-    #[cfg(windows)]
     async fn update_map(&mut self, update: qemu_display::UpdateMap) {
         self.send(ConsoleEvent::UpdateMap(update));
     }
@@ -620,6 +684,8 @@ impl ConsoleListenerHandler for ConsoleHandler {
                 "org.qemu.Display1.Listener.Win32.Map".to_string(),
                 "org.qemu.Display1.Listener.Win32.D3d11".to_string(),
             ]
+        } else if cfg!(unix) {
+            vec!["org.qemu.Display1.Listener.Unix.Map".to_string()]
         } else {
             vec![]
         }
