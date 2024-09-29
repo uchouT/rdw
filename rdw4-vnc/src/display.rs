@@ -169,6 +169,8 @@ pub(crate) mod imp {
                 move |_, width, height, wmm, hmm| {
                     let sf = this.obj().scale_factor() as u32;
                     let (width, height) = (width / sf, height / sf);
+                    // gvnc always seems to return a somewhat random status value here, it doesn't
+                    // seem to actually indicate if the resize was successful...
                     let status = this.connection.set_size(width, height);
                     log::debug!(
                         "resize-request: {:?} -> {:?}",
@@ -248,6 +250,10 @@ pub(crate) mod imp {
 
             self.connection.connect_vnc_server_cut_text(|_, text| {
                 log::debug!("server-cut-text: {}", text);
+            });
+
+            self.connection.connect_vnc_desktop_resize(|_, object, p0| {
+                log::debug!("desktop-resize: {}, {}", object, p0);
             });
 
             self.connection.connect_vnc_framebuffer_update(clone!(

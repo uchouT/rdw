@@ -28,6 +28,7 @@ pub struct Display {
     pub(crate) picture: Picture,
 
     pub(crate) scaling: Cell<bool>,
+    pub(crate) remote_resize: Cell<bool>,
     pub(crate) show_local_cursor: Cell<bool>,
     pub(crate) read_only: Cell<bool>,
     // The remote display size, ex: 1024x768
@@ -274,6 +275,13 @@ impl ObjectImpl for Display {
                         .default_value(true)
                         .construct()
                         .build(),
+                    glib::ParamSpecBoolean::builder("remote-resize")
+                        .nick("Remote Resize")
+                        .blurb("Resize the remote display with local widget size, if supported")
+                        .explicit_notify()
+                        .default_value(true)
+                        .construct()
+                        .build(),
                 ]
             })
             .as_ref()
@@ -310,6 +318,10 @@ impl ObjectImpl for Display {
                 let val = value.get().unwrap();
                 self.set_scaling(val)
             }
+            "remote-resize" => {
+                let val = value.get().unwrap();
+                self.set_remote_resize(val)
+            }
             _ => unimplemented!(),
         }
     }
@@ -323,6 +335,7 @@ impl ObjectImpl for Display {
             "read-only" => self.read_only().to_value(),
             "show-local-cursor" => self.show_local_cursor().to_value(),
             "scaling" => self.scaling().to_value(),
+            "remote-resize" => self.remote_resize().to_value(),
             _ => unimplemented!(),
         }
     }
@@ -526,6 +539,16 @@ impl Display {
         self.scaling.get()
     }
 
+    fn set_remote_resize(&self, remote_resize: bool) {
+        self.remote_resize.set(remote_resize);
+        self.obj().notify("remote-resize");
+        self.obj().queue_resize();
+    }
+
+    fn remote_resize(&self) -> bool {
+        self.remote_resize.get()
+    }
+
     pub(crate) fn update_cursor(&self) {
         if self.read_only() || self.show_local_cursor() {
             self.picture.set_cursor(None);
@@ -637,7 +660,8 @@ impl Display {
     }
 
     fn do_resize_request(&self, width: u32, height: u32, w_mm: u32, h_mm: u32) {
-        if self.read_only() {
+        // Only process the resize-request if not read-only and remote resizing is enabled.
+        if self.read_only() || !self.remote_resize.get() {
             return;
         }
 
