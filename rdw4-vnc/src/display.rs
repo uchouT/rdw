@@ -206,6 +206,41 @@ pub(crate) mod imp {
                 conn.shutdown();
             });
 
+            self.connection
+                .connect_vnc_auth_choose_subtype(|conn, typ, va| {
+                    use gvnc::ConnectionAuthVencrypt::*;
+
+                    // SAFETY: We can trust that gvnc gives us a valid type.
+                    match unsafe { gvnc::ConnectionAuth::from_glib(typ as i32) } {
+                        gvnc::ConnectionAuth::Vencrypt => {
+                            let prefer_subauth = [
+                                Tlsvnc, Tlssasl, Tlsplain, Tlsnone, X509sasl, X509vnc, X509plain,
+                                X509none, Plain,
+                            ];
+                            for &auth in &prefer_subauth {
+                                for a in va.iter() {
+                                    if a.get::<gvnc::ConnectionAuthVencrypt>().unwrap() == auth {
+                                        if let Err(e) = conn
+                                            .set_auth_subtype(auth.into_glib().try_into().unwrap())
+                                        {
+                                            log::warn!("Failed to set auth subtype: {}", e);
+                                            conn.shutdown();
+                                        }
+                                        return;
+                                    }
+                                }
+                            }
+
+                            log::warn!("No preferred auth subtype found");
+                            conn.shutdown();
+                        }
+                        typ => {
+                            log::warn!("unknown how to set vnc subtype for type {typ:?}");
+                            conn.shutdown();
+                        }
+                    }
+                });
+
             self.connection.connect_vnc_initialized(clone!(
                 #[weak(rename_to = this)]
                 self,
