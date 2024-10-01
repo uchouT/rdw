@@ -15,12 +15,11 @@ use std::os::unix::io::IntoRawFd;
 mod imp {
     use super::*;
     use gtk::subclass::prelude::*;
-    use qemu_display::{memmap2::Mmap, util::mmap};
+    use qemu_display::ScanoutMmap;
     #[cfg(any(windows, unix))]
     use std::cell::RefCell;
     #[cfg(windows)]
     use std::ffi::c_void;
-    use std::os::fd::AsRawFd;
     #[cfg(windows)]
     use windows::Win32::Foundation::{CloseHandle, HANDLE};
 
@@ -84,10 +83,7 @@ mod imp {
     pub struct Display {
         pub(crate) console: OnceCell<Console>,
         keymap: Cell<Option<&'static [u16]>>,
-        #[cfg(unix)]
-        scanout_map: RefCell<Option<(Mmap, u32)>>,
-        #[cfg(windows)]
-        scanout_map: RefCell<Option<(MemoryMap, u32)>>,
+        scanout_map: RefCell<Option<ScanoutMmap>>,
     }
 
     #[glib::object_subclass]
@@ -333,39 +329,37 @@ mod imp {
                                             );
                                             continue;
                                         }
-                                        let map = unsafe {
-                                            mmap(
-                                                scanout.fd.as_raw_fd(),
-                                                scanout.height as usize * scanout.stride as usize,
-                                                scanout.offset.into(),
-                                            )
-                                        }
-                                        .unwrap();
                                         this.obj().set_display_size(Some((
                                             scanout.width as _,
                                             scanout.height as _,
                                         )));
-                                        this.scanout_map.replace(Some((map, scanout.stride)));
+                                        let map = match scanout.mmap() {
+                                            Ok(map) => Some(map),
+                                            Err(err) => {
+                                                log::warn!("Failed to mmap: {}", err);
+                                                continue;
+                                            }
+                                        };
+                                        this.scanout_map.replace(map);
                                         let _ = wait_tx.send(());
                                     }
                                     #[cfg(unix)]
                                     UpdateMap(u) => {
                                         log::debug!("{u:?}");
                                         let scanout_map = this.scanout_map.borrow();
-                                        let Some((map, stride)) = scanout_map.as_ref() else {
+                                        let Some(map) = scanout_map.as_ref() else {
                                             log::warn!("No mapped scanout!");
                                             continue;
                                         };
-                                        let stride = *stride;
                                         let bytes = map.as_ref();
                                         this.obj().update_area(
                                             u.x as _,
                                             u.y as _,
                                             u.w as _,
                                             u.h as _,
-                                            stride as _,
+                                            map.stride() as _,
                                             Some(
-                                                &bytes[u.y as usize * stride as usize
+                                                &bytes[u.y as usize * map.stride() as usize
                                                     + u.x as usize * 4..],
                                             ),
                                         );
