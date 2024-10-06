@@ -129,6 +129,10 @@ pub trait DisplayExt: 'static {
 
     fn set_alternative_text(&self, alt_text: &str);
 
+    fn try_grab(&self) -> Grab;
+
+    fn ungrab(&self);
+
     fn connect_key_event<F: Fn(&Self, u32, u32, KeyEvent) + 'static>(
         &self,
         f: F,
@@ -393,6 +397,16 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
 
     fn set_alternative_text(&self, alt_text: &str) {
         self.update_property(&[gtk::accessible::Property::Description(alt_text)]);
+    }
+
+    fn try_grab(&self) -> Grab {
+        let self_: &Display = unsafe { self.unsafe_cast_ref::<Display>() };
+        self_.imp().try_grab()
+    }
+
+    fn ungrab(&self) {
+        let self_: &Display = unsafe { self.unsafe_cast_ref::<Display>() };
+        self_.imp().ungrab()
     }
 
     fn connect_key_event<F: Fn(&Self, u32, u32, KeyEvent) + 'static>(

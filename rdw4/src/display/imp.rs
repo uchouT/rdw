@@ -708,7 +708,7 @@ impl Display {
         self.clear_last_key_press();
     }
 
-    fn ungrab(&self) {
+    pub(crate) fn ungrab(&self) {
         self.ungrab_keyboard();
         self.ungrab_mouse();
     }
@@ -848,7 +848,7 @@ impl Display {
         // todo
     }
 
-    fn try_grab(&self) -> Grab {
+    pub(crate) fn try_grab(&self) -> Grab {
         let mut grabbed = Default::default();
         self.picture.grab_focus();
         if self.try_grab_keyboard() {
