@@ -42,9 +42,9 @@ async fn display_from_opt(opt: Rc<RefCell<AppOptions>>) -> Option<Display<'stati
         return Some(Display::new_qmp(qmp_addr).await.unwrap());
     }
     let builder = if let Some(addr) = &opt.borrow().address {
-        zbus::ConnectionBuilder::address(addr.as_str())
+        zbus::connection::Builder::address(addr.as_str())
     } else {
-        zbus::ConnectionBuilder::session()
+        zbus::connection::Builder::session()
     };
     let conn = builder
         .unwrap()
