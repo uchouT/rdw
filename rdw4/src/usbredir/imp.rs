@@ -1,8 +1,6 @@
 use super::*;
-use futures::{
-    channel::mpsc::{self, Receiver, Sender},
-    StreamExt,
-};
+use futures_channel::mpsc::{self, Receiver, Sender};
+use futures_util::StreamExt;
 use glib::{clone, subclass::Signal, ParamSpec};
 use gtk::CompositeTemplate;
 use rusb::UsbContext;

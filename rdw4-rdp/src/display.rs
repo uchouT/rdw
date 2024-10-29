@@ -4,7 +4,7 @@ use freerdp::{
     winpr::{wait_for_multiple_objects, WaitResult},
     RdpErr, RdpErrConnect, RdpError, Result,
 };
-use futures::stream::StreamExt;
+use futures_util::StreamExt;
 use glib::{clone, subclass::prelude::*, translate::*, SignalHandlerId};
 use gtk::{glib, prelude::*};
 
@@ -38,7 +38,7 @@ mod imp {
         client::{CliprdrFormat, Context},
         input::{KbdFlags, PtrFlags, PtrXFlags, WHEEL_ROTATION_MASK},
     };
-    use futures::channel::{mpsc::UnboundedReceiver, oneshot};
+    use futures_channel::{mpsc::UnboundedReceiver, oneshot};
     use glib::subclass::Signal;
     use gtk::subclass::prelude::*;
     use rdw::gtk::{gdk, gio, glib::MainContext};
@@ -65,7 +65,7 @@ mod imp {
     #[derive(Default)]
     pub(crate) struct Clipboard {
         pub(crate) watch_id: Cell<Option<SignalHandlerId>>,
-        pub(crate) tx: RefCell<Option<(Format, futures::channel::mpsc::Sender<glib::Bytes>)>>,
+        pub(crate) tx: RefCell<Option<(Format, futures_channel::mpsc::Sender<glib::Bytes>)>>,
     }
 
     impl std::fmt::Debug for Clipboard {
@@ -114,7 +114,7 @@ mod imp {
     impl Default for Display {
         fn default() -> Self {
             fn new_context() -> (Box<Context<RdpContextHandler>>, UnboundedReceiver<RdpEvent>) {
-                let (tx, rx) = futures::channel::mpsc::unbounded();
+                let (tx, rx) = futures_channel::mpsc::unbounded();
                 let mut context = Context::new(RdpContextHandler::new(tx));
                 context.settings.set_support_display_control(true);
                 context
@@ -479,7 +479,7 @@ mod imp {
                                     stream,
                                     #[upgrade_or_panic]
                                     async move {
-                                        use futures::stream::StreamExt;
+                                        use futures_util::StreamExt;
 
                                         if this.clipboard.tx.borrow().is_some() {
                                             return Err(glib::Error::new(
@@ -487,7 +487,7 @@ mod imp {
                                                 "clipboard request pending",
                                             ));
                                         }
-                                        let (tx, mut rx) = futures::channel::mpsc::channel(1);
+                                        let (tx, mut rx) = futures_channel::mpsc::channel(1);
                                         this.clipboard.tx.replace(Some((format, tx)));
                                         if this
                                             .send_event(Event::ClipboardRequest(format))

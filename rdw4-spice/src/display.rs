@@ -44,7 +44,7 @@ mod imp {
         pub(crate) tx: RefCell<
             Option<(
                 spice::ClipboardFormat,
-                futures::channel::mpsc::Sender<glib::Bytes>,
+                futures_channel::mpsc::Sender<glib::Bytes>,
             )>,
         >,
     }
@@ -236,14 +236,14 @@ mod imp {
                                     };
 
                                     Some(Box::pin(clone!(#[weak] this, #[strong] stream, #[upgrade_or_panic] async move {
-                                        use futures::stream::StreamExt;
+                                        use futures_util::StreamExt;
 
                                         if this.clipboard[selection as usize].tx.borrow().is_some() {
                                             return Err(glib::Error::new(gio::IOErrorEnum::Failed, "clipboard request pending"));
                                         }
 
                                         if let Some(main) = this.main.upgrade() {
-                                            let (tx, mut rx) = futures::channel::mpsc::channel(1);
+                                            let (tx, mut rx) = futures_channel::mpsc::channel(1);
                                             this.clipboard[selection as usize].tx.replace(Some((format, tx)));
                                             main.clipboard_selection_request(selection, format as u32);
                                             if let Some(bytes) = rx.next().await {
