@@ -12,7 +12,7 @@ variables:
 .rdw.fedora:41:
   variables:
     FDO_DISTRIBUTION_VERSION: '41'
-    FDO_DISTRIBUTION_TAG: "2024-10-30.3"
+    FDO_DISTRIBUTION_TAG: "2024-10-30.4"
 
 build-fedora-container:
   extends:
@@ -34,6 +34,7 @@ build-fedora-container:
       openssl-devel
       rust
       spice-glib-devel
+      spice-gtk3-vala
       usbredir-devel
       vala
     FDO_DISTRIBUTION_EXEC: >-
@@ -45,8 +46,16 @@ test-build:
     - .rdw.fedora:41
   stage: test
   script:
-    - pushd rdw4
-    - make
-    - sudo make install
-    - popd
-    - cargo build
+    - | # build librdw
+      pushd rdw4
+      make
+      sudo make install
+      popd
+    - cargo build # build the demo, no bindings
+    - | # build librdw-*
+      for i in rdw4-rdp rdw4-spice rdw4-vnc; do
+        pushd $i
+        make
+        sudo make install
+        popd
+      done
