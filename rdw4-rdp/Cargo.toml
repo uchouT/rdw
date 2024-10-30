@@ -25,6 +25,7 @@ freerdp = { package = "freerdp2", git = "https://github.com/elmarco/freerdp-rs.g
 nix = { version = "0.28.0", features = ["fs", "event"] }
 futures-executor = "0.3"
 futures-util = "0.3"
+futures-channel = "0.3"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.41.0", features = [

@@ -13,8 +13,6 @@ use freerdp::{
     locale::keyboard_init_ex,
     update, RdpError, Result, PIXEL_FORMAT_BGRA32,
 };
-use futures_executor::block_on;
-use futures_util::SinkExt;
 
 use crate::util::mime_from_format;
 
@@ -269,8 +267,9 @@ impl RdpContextHandler {
     }
 
     fn send(&mut self, event: RdpEvent) -> Result<()> {
-        let mut tx = self.tx.clone();
-        block_on(tx.send(event)).map_err(|e| RdpError::Failed(format!("{}", e)))?;
+        self.tx
+            .unbounded_send(event)
+            .map_err(|e| RdpError::Failed(format!("{}", e)))?;
         Ok(())
     }
 
