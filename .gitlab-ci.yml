@@ -12,7 +12,7 @@ variables:
 .rdw.fedora:41:
   variables:
     FDO_DISTRIBUTION_VERSION: '41'
-    FDO_DISTRIBUTION_TAG: "2024-10-30.1"
+    FDO_DISTRIBUTION_TAG: "2024-10-30.2"
 
 build-fedora-container:
   extends:
@@ -30,6 +30,7 @@ build-fedora-container:
       gtk4-devel
       gvnc-devel
       libadwaita-devel
+      libepoxy-devel
       openssl-devel
       rust
       spice-glib-devel
