@@ -12,7 +12,7 @@ variables:
 .rdw.fedora:41:
   variables:
     FDO_DISTRIBUTION_VERSION: '41'
-    FDO_DISTRIBUTION_TAG: "2024-10-30.2"
+    FDO_DISTRIBUTION_TAG: "2024-10-30.3"
 
 build-fedora-container:
   extends:
@@ -22,7 +22,7 @@ build-fedora-container:
   variables:
     FDO_DISTRIBUTION_PACKAGES: >-
       cargo
-      freerdp-devel
+      freerdp2-devel
       git
       gobject-introspection-devel
       gstreamer1-devel
