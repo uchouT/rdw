@@ -52,8 +52,8 @@ impl PaintableImpl for Paintable {
 
     fn snapshot(&self, snapshot: &gdk::Snapshot, width: f64, height: f64) {
         if let Some(texture) = self.texture.borrow().as_ref() {
-            let y_inverted = self.y0_top.get().unwrap_or(true);
-            if y_inverted {
+            let flip = !self.y0_top.get().unwrap_or(true);
+            if flip {
                 snapshot.save();
                 snapshot.translate(&graphene::Point::new(0.0, height as _));
                 snapshot.scale(1.0, -1.0);
