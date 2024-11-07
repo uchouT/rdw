@@ -191,6 +191,12 @@ impl Paintable {
         let ctxt = self.gl_context()?;
         ctxt.make_current();
 
+        let (max_w, max_h) = self.size();
+        let x = x.clamp(0, max_w);
+        let y = y.clamp(0, max_h);
+        let w = w.clamp(0, max_w - x);
+        let h = h.clamp(0, max_h - y);
+
         // TODO: check data boundaries
         if let Some(data) = data {
             #[cfg(windows)]
