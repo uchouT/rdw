@@ -4,16 +4,16 @@ use std::path::*;
 use cbindgen::Builder;
 
 fn main() {
-    let path = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-    let meta = MetadataCommand::new()
-        .manifest_path("./Cargo.toml")
-        .current_dir(&path)
-        .exec()
-        .unwrap();
-
-    println!("{:?}", &meta);
-
     if cfg!(feature = "capi") {
+        let path = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+        let meta = MetadataCommand::new()
+            .manifest_path("./Cargo.toml")
+            .current_dir(&path)
+            .exec()
+            .unwrap();
+
+        println!("{:?}", &meta);
+
         let version = &meta.root_package().unwrap().version;
         let name = &meta.root_package().unwrap().metadata["capi"]["header"]["name"]
             .as_str()
