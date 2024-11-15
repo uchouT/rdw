@@ -276,8 +276,6 @@ impl ObjectImpl for Display {
                         .construct()
                         .build(),
                     glib::ParamSpecBoolean::builder("remote-resize")
-                        .nick("Remote Resize")
-                        .blurb("Resize the remote display with local widget size, if supported")
                         .explicit_notify()
                         .default_value(true)
                         .construct()
@@ -540,8 +538,10 @@ impl Display {
     }
 
     fn set_remote_resize(&self, remote_resize: bool) {
-        self.remote_resize.set(remote_resize);
-        self.obj().notify("remote-resize");
+        let old_value = self.remote_resize.replace(remote_resize);
+        if old_value != remote_resize {
+            self.obj().notify("remote-resize");
+        }
         self.obj().queue_resize();
     }
 
@@ -661,7 +661,7 @@ impl Display {
 
     fn do_resize_request(&self, width: u32, height: u32, w_mm: u32, h_mm: u32) {
         // Only process the resize-request if not read-only and remote resizing is enabled.
-        if self.read_only() || !self.remote_resize.get() {
+        if self.read_only() || !self.remote_resize() {
             return;
         }
 

@@ -156,7 +156,7 @@ pub trait DisplayExt: 'static {
 
     fn connect_property_grabbed_notify<F: Fn(&Self) + 'static>(&self, f: F) -> SignalHandlerId;
 
-    fn connect_property_remote_resize<F: Fn(&Self) + 'static>(&self, f: F) -> SignalHandlerId;
+    fn connect_remote_resize_notify<F: Fn(&Self) + 'static>(&self, f: F) -> SignalHandlerId;
 
     fn connect_resize_request<F: Fn(&Self, u32, u32, u32, u32) + 'static>(
         &self,
@@ -628,7 +628,7 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
         }
     }
 
-    fn connect_property_remote_resize<F: Fn(&Self) + 'static>(&self, f: F) -> SignalHandlerId {
+    fn connect_remote_resize_notify<F: Fn(&Self) + 'static>(&self, f: F) -> SignalHandlerId {
         unsafe extern "C" fn notify_trampoline<P, F: Fn(&P) + 'static>(
             this: *mut RdwDisplay,
             _param_spec: glib::ffi::gpointer,
