@@ -149,7 +149,7 @@ impl Paintable {
             gl::TexImage2D(
                 gl::TEXTURE_2D,
                 0,
-                gl::RGB as _,
+                gl::RGBA as _,
                 w as _,
                 h as _,
                 0,
