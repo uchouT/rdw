@@ -77,7 +77,7 @@ async fn display_from_opt(opt: Rc<RefCell<AppOptions>>) -> Option<Display<'stati
             .map(Into::into)
     } else {
         if opt.borrow().wait {
-            unimplemented!(); // FIXME
+            Display::lookup(&conn, true, None).await.unwrap();
         }
         BusName::try_from("org.qemu").ok()
     };
