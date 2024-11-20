@@ -542,7 +542,6 @@ impl Display {
         if old_value != remote_resize {
             self.obj().notify("remote-resize");
         }
-        self.obj().queue_resize();
     }
 
     fn remote_resize(&self) -> bool {
