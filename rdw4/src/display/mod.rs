@@ -129,6 +129,10 @@ pub trait DisplayExt: 'static {
 
     fn set_alternative_text(&self, alt_text: &str);
 
+    fn remote_resize(&self) -> bool;
+
+    fn set_remote_resize(&self, remote_resize: bool);
+
     fn try_grab(&self) -> Grab;
 
     fn ungrab(&self);
@@ -151,6 +155,8 @@ pub trait DisplayExt: 'static {
     fn connect_property_read_only_notify<F: Fn(&Self) + 'static>(&self, f: F) -> SignalHandlerId;
 
     fn connect_property_grabbed_notify<F: Fn(&Self) + 'static>(&self, f: F) -> SignalHandlerId;
+
+    fn connect_remote_resize_notify<F: Fn(&Self) + 'static>(&self, f: F) -> SignalHandlerId;
 
     fn connect_resize_request<F: Fn(&Self, u32, u32, u32, u32) + 'static>(
         &self,
@@ -399,6 +405,14 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
         self.update_property(&[gtk::accessible::Property::Description(alt_text)]);
     }
 
+    fn remote_resize(&self) -> bool {
+        self.property("remote-resize")
+    }
+
+    fn set_remote_resize(&self, remote_resize: bool) {
+        self.set_property("remote-resize", remote_resize);
+    }
+
     fn try_grab(&self) -> Grab {
         let self_: &Display = unsafe { self.unsafe_cast_ref::<Display>() };
         self_.imp().try_grab()
@@ -566,6 +580,30 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
         }
     }
 
+    fn connect_property_read_only_notify<F: Fn(&Self) + 'static>(&self, f: F) -> SignalHandlerId {
+        unsafe extern "C" fn notify_trampoline<P, F: Fn(&P) + 'static>(
+            this: *mut RdwDisplay,
+            _param_spec: glib::ffi::gpointer,
+            f: glib::ffi::gpointer,
+        ) where
+            P: IsA<Display>,
+        {
+            let f: &F = &*(f as *const F);
+            f(Display::from_glib_borrow(this).unsafe_cast_ref())
+        }
+        unsafe {
+            let f: Box<F> = Box::new(f);
+            glib::signal::connect_raw(
+                self.as_ptr() as *mut _,
+                b"notify::read-only\0".as_ptr() as *const _,
+                Some(std::mem::transmute::<_, unsafe extern "C" fn()>(
+                    notify_trampoline::<Self, F> as *const (),
+                )),
+                Box::into_raw(f),
+            )
+        }
+    }
+
     fn connect_property_grabbed_notify<F: Fn(&Self) + 'static>(&self, f: F) -> SignalHandlerId {
         unsafe extern "C" fn notify_trampoline<P, F: Fn(&P) + 'static>(
             this: *mut RdwDisplay,
@@ -590,7 +628,7 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
         }
     }
 
-    fn connect_property_read_only_notify<F: Fn(&Self) + 'static>(&self, f: F) -> SignalHandlerId {
+    fn connect_remote_resize_notify<F: Fn(&Self) + 'static>(&self, f: F) -> SignalHandlerId {
         unsafe extern "C" fn notify_trampoline<P, F: Fn(&P) + 'static>(
             this: *mut RdwDisplay,
             _param_spec: glib::ffi::gpointer,
@@ -605,7 +643,7 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
             let f: Box<F> = Box::new(f);
             glib::signal::connect_raw(
                 self.as_ptr() as *mut _,
-                b"notify::read-only\0".as_ptr() as *const _,
+                b"notify::remote-resize\0".as_ptr() as *const _,
                 Some(std::mem::transmute::<_, unsafe extern "C" fn()>(
                     notify_trampoline::<Self, F> as *const (),
                 )),
