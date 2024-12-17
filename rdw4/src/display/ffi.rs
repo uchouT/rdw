@@ -11,6 +11,10 @@ extern "C" {
         height: *mut usize,
     ) -> bool;
 
+    pub fn rdw_display_try_grab(dpy: *mut RdwDisplay) -> Grab;
+
+    pub fn rdw_display_ungrab(dpy: *mut RdwDisplay);
+
     pub fn rdw_display_set_display_size(dpy: *mut RdwDisplay, width: usize, height: usize);
 
     pub fn rdw_display_define_cursor(dpy: *mut RdwDisplay, cursor: *const gdk::ffi::GdkCursor);

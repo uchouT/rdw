@@ -42,6 +42,22 @@ pub extern "C" fn rdw_shot_widget(
     Display::shot_widget(w).to_glib_full()
 }
 
+/// rdw_display_try_grab:
+/// @dpy: A #RdwDisplay
+#[no_mangle]
+pub extern "C" fn rdw_display_try_grab(dpy: *mut RdwDisplay) -> crate::ffi::RdwGrab {
+    let this: &Display = unsafe { &from_glib_borrow(dpy) };
+    this.try_grab().into_glib()
+}
+
+/// rdw_display_ungrab:
+/// @dpy: A #RdwDisplay
+#[no_mangle]
+pub extern "C" fn rdw_display_ungrab(dpy: *mut RdwDisplay) {
+    let this: &Display = unsafe { &from_glib_borrow(dpy) };
+    this.ungrab()
+}
+
 /// rdw_display_send_keys:
 /// @dpy: A #RdwDisplay
 /// @keys: (array length=nkeys): an array of GDK keyvals

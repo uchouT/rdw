@@ -415,12 +415,30 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
 
     fn try_grab(&self) -> Grab {
         let self_: &Display = unsafe { self.unsafe_cast_ref::<Display>() };
-        self_.imp().try_grab()
+
+        #[cfg(feature = "bindings")]
+        unsafe {
+            ffi::rdw_display_try_grab(self_.to_glib_none().0)
+        }
+
+        #[cfg(not(feature = "bindings"))]
+        {
+            self_.imp().try_grab()
+        }
     }
 
     fn ungrab(&self) {
         let self_: &Display = unsafe { self.unsafe_cast_ref::<Display>() };
-        self_.imp().ungrab()
+
+        #[cfg(feature = "bindings")]
+        unsafe {
+            ffi::rdw_display_ungrab(self_.to_glib_none().0);
+        }
+
+        #[cfg(not(feature = "bindings"))]
+        {
+            self_.imp().ungrab()
+        }
     }
 
     fn connect_key_event<F: Fn(&Self, u32, u32, KeyEvent) + 'static>(
