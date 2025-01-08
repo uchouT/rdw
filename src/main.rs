@@ -46,13 +46,13 @@ async fn display_from_opt(opt: Rc<RefCell<AppOptions>>) -> Option<Display<'stati
     } else {
         zbus::connection::Builder::session()
     };
-    let conn = builder
-        .unwrap()
-        .internal_executor(false)
-        .build()
-        .await
-        .expect("Failed to connect to DBus");
-
+    let conn = match builder.unwrap().internal_executor(false).build().await {
+        Ok(conn) => conn,
+        Err(err) => {
+            eprintln!("Failed to connect to DBus: {err}");
+            return None;
+        }
+    };
     let conn_clone = conn.clone();
     MainContext::default().spawn_local(async move {
         loop {
