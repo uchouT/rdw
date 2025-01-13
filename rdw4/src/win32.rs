@@ -19,7 +19,6 @@ pub(crate) fn spi_set_mouse(mut mouse: [isize; 3]) -> Result<()> {
             Some(mouse.as_mut_ptr() as _),
             SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
         )
-        .ok()
     }
 }
 
@@ -31,7 +30,6 @@ pub(crate) fn spi_set_mouse_speed(mut speed: isize) -> Result<()> {
             Some(&mut speed as *mut _ as *mut _),
             SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
         )
-        .ok()
     }
 }
 
@@ -44,8 +42,7 @@ pub(crate) fn spi_get_mouse() -> Result<[isize; 3]> {
             0,
             Some(mouse.as_mut_ptr() as *mut _),
             SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
-        )
-        .ok()?
+        )?
     }
 
     Ok(mouse)
@@ -60,8 +57,7 @@ pub(crate) fn spi_get_mouse_speed() -> Result<isize> {
             0,
             Some(&mut speed as *mut _ as *mut _),
             SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
-        )
-        .ok()?
+        )?
     }
 
     Ok(speed)
@@ -124,7 +120,7 @@ pub(crate) fn hook_keyboard() -> Result<HHOOK> {
 }
 
 pub(crate) fn unhook(hook: HHOOK) -> Result<()> {
-    unsafe { UnhookWindowsHookEx(hook).ok() }
+    unsafe { UnhookWindowsHookEx(hook) }
 }
 
 pub(crate) fn hook_mouse() -> Result<HHOOK> {

@@ -110,7 +110,7 @@ impl Helper {
     }
 
     pub(crate) fn d3d11_texture2d_acquire0(&self) -> Result<Option<D3d11TexGuard>, String> {
-        use windows::{core::ComInterface, Win32::System::Threading::INFINITE};
+        use windows::{core::Interface, Win32::System::Threading::INFINITE};
 
         if !self.texture_can_acquire.get() {
             log::debug!("can't acquire texture2d");

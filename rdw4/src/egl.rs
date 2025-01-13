@@ -129,7 +129,9 @@ impl Drop for RdwD3d11Texture2dScanout {
         use windows::Win32::Foundation::{CloseHandle, HANDLE};
 
         unsafe {
-            CloseHandle(HANDLE(self.handle as _));
+            if let Err(e) = CloseHandle(HANDLE(self.handle as _)) {
+                log::warn!("Failed to close handle: {:?}", e);
+            }
         }
     }
 }

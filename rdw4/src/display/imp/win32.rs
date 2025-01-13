@@ -36,8 +36,7 @@ impl Helper {
             dwFlags: RIDEV_INPUTSINK,
             hwndTarget: hwnd,
         };
-        if let Err(e) =
-            unsafe { RegisterRawInputDevices(&[rid], std::mem::size_of_val(&rid) as _).ok() }
+        if let Err(e) = unsafe { RegisterRawInputDevices(&[rid], std::mem::size_of_val(&rid) as _) }
         {
             log::warn!("Failed to RegisterRawInputDevices: {e}");
             return;
@@ -93,7 +92,7 @@ impl Helper {
             return false;
         };
         let mut win_rect = unsafe { std::mem::zeroed() };
-        if let Err(e) = unsafe { GetWindowRect(h, &mut win_rect).ok() } {
+        if let Err(e) = unsafe { GetWindowRect(h, &mut win_rect) } {
             log::warn!("Failed to GetWindowRect: {e}");
             return false;
         }
@@ -105,7 +104,7 @@ impl Helper {
         win_rect.top = (win_rect.top + win_rect.bottom) / 2;
         win_rect.bottom = win_rect.top + 1;
 
-        if let Err(e) = unsafe { ClipCursor(Some(&win_rect)).ok() } {
+        if let Err(e) = unsafe { ClipCursor(Some(&win_rect)) } {
             log::warn!("Failed to ClipCursor: {e}");
             return false;
         }
@@ -163,7 +162,9 @@ impl Helper {
 
     pub(crate) fn ungrab_mouse(&self) {
         unsafe {
-            windows::Win32::UI::WindowsAndMessaging::ClipCursor(None);
+            if let Err(e) = windows::Win32::UI::WindowsAndMessaging::ClipCursor(None) {
+                log::warn!("Failed to ClipCursor: {e}");
+            }
             if let Some(h) = self.mouse_hook.take() {
                 let _ = win32::unhook(h);
             }

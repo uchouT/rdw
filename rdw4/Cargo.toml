@@ -12,9 +12,9 @@ x11 = ["dep:gdk-x11", "dep:x11"]
 capi = ["env_logger"]
 
 [build-dependencies]
-cargo_metadata = "0.18"
+cargo_metadata = "0.19"
 cbindgen = { path = "../cbindgen", features = ["gobject"] }
-system-deps = "6.2"
+system-deps = "7.0"
 
 [package.metadata.system-deps]
 rdw4 = { version = "0.1", feature = "bindings" }
@@ -32,7 +32,7 @@ futures-util = "0.3"
 epoxy = "0.1"
 keycodemap = { package = "rdw-keycodemap", path = "../keycodemap", version = "0.1" }
 env_logger = { version = "0.11", default-features = false, optional = true }
-wayland-protocols = { version = "0.31", features = [
+wayland-protocols = { version = "0.32", features = [
     "unstable",
     "client",
 ], optional = true }
@@ -70,7 +70,7 @@ optional = true
 version = "0.9"
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.48.0", features = [
+windows = { version = "0.56.0", features = [
     "Win32_Devices_HumanInterfaceDevice",
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
