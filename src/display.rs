@@ -18,10 +18,6 @@ mod imp {
     use qemu_display::ScanoutMmap;
     #[cfg(any(windows, unix))]
     use std::cell::RefCell;
-    #[cfg(windows)]
-    use std::ffi::c_void;
-    #[cfg(windows)]
-    use windows::Win32::Foundation::{CloseHandle, HANDLE};
 
     #[repr(C)]
     pub struct RdwDisplayQemuClass {
@@ -47,36 +43,6 @@ mod imp {
 
     unsafe impl InstanceStruct for RdwDisplayQemu {
         type Type = Display;
-    }
-
-    #[cfg(windows)]
-    #[derive(Debug)]
-    struct MemoryMap {
-        handle: HANDLE,
-        ptr: *const c_void,
-        offset: isize,
-        size: usize,
-    }
-
-    #[cfg(windows)]
-    impl Drop for MemoryMap {
-        fn drop(&mut self) {
-            unsafe {
-                use windows::Win32::System::Memory::UnmapViewOfFile;
-
-                UnmapViewOfFile(self.ptr);
-                CloseHandle(self.handle);
-            }
-        }
-    }
-
-    #[cfg(windows)]
-    impl MemoryMap {
-        fn as_bytes(&self) -> &[u8] {
-            unsafe {
-                std::slice::from_raw_parts(self.ptr.cast::<u8>().offset(self.offset), self.size)
-            }
-        }
     }
 
     #[derive(Debug, Default)]
@@ -319,7 +285,6 @@ mod imp {
                                             Some(&u.data),
                                         );
                                     }
-                                    #[cfg(unix)]
                                     ScanoutMap { scanout, wait_tx } => {
                                         log::debug!("{scanout:?}");
                                         if scanout.format != 0x20020888 {
@@ -343,7 +308,6 @@ mod imp {
                                         this.scanout_map.replace(map);
                                         let _ = wait_tx.send(());
                                     }
-                                    #[cfg(unix)]
                                     UpdateMap(u) => {
                                         log::debug!("{u:?}");
                                         let scanout_map = this.scanout_map.borrow();
@@ -360,82 +324,6 @@ mod imp {
                                             map.stride() as _,
                                             Some(
                                                 &bytes[u.y as usize * map.stride() as usize
-                                                    + u.x as usize * 4..],
-                                            ),
-                                        );
-                                    }
-                                    #[cfg(windows)]
-                                    ScanoutMap { scanout, wait_tx } => {
-                                        use windows::Win32::System::Memory::{
-                                            MapViewOfFile, FILE_MAP_READ,
-                                        };
-
-                                        log::debug!("{s:?}");
-                                        if scanout.format != 0x20020888 {
-                                            log::warn!(
-                                                "Format not yet supported: {:X}",
-                                                scanout.format
-                                            );
-                                            continue;
-                                        }
-
-                                        let handle = HANDLE(scanout.handle as _);
-                                        let size =
-                                            scanout.height as usize * scanout.stride as usize;
-                                        let offset = scanout.offset as isize;
-                                        let ptr = unsafe {
-                                            MapViewOfFile(
-                                                handle,
-                                                FILE_MAP_READ,
-                                                0,
-                                                0,
-                                                scanout.offset as usize + size,
-                                            )
-                                        };
-                                        if ptr.is_null() {
-                                            log::warn!("Failed to map scanout!");
-                                            continue;
-                                        }
-
-                                        let map = MemoryMap {
-                                            ptr,
-                                            handle,
-                                            offset,
-                                            size,
-                                        };
-                                        this.obj().set_display_size(Some((
-                                            scanout.width as _,
-                                            scanout.height as _,
-                                        )));
-                                        this.obj().update_area(
-                                            0,
-                                            0,
-                                            scanout.width as _,
-                                            scanout.height as _,
-                                            scanout.stride as _,
-                                            Some(map.as_bytes()),
-                                        );
-                                        this.scanout_map.replace(Some((map, scanout.stride)));
-                                        let _ = wait_tx.send(());
-                                    }
-                                    #[cfg(windows)]
-                                    UpdateMap(u) => {
-                                        log::debug!("{u:?}");
-                                        let scanout_map = this.scanout_map.borrow();
-                                        let Some((map, stride)) = scanout_map.as_ref() else {
-                                            log::warn!("No mapped scanout!");
-                                            continue;
-                                        };
-                                        let stride = *stride;
-                                        let bytes = map.as_bytes();
-                                        this.obj().update_area(
-                                            u.x as _,
-                                            u.y as _,
-                                            u.w as _,
-                                            u.h as _,
-                                            stride as _,
-                                            Some(
-                                                &bytes[u.y as usize * stride as usize
                                                     + u.x as usize * 4..],
                                             ),
                                         );
