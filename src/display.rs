@@ -504,12 +504,10 @@ impl ConsoleListenerMapHandler for ConsoleHandler {
 #[cfg(windows)]
 #[async_trait::async_trait]
 impl ConsoleListenerD3d11Handler for ConsoleHandler {
-    #[cfg(windows)]
     async fn scanout_texture2d(&mut self, scanout: qemu_display::ScanoutD3dTexture2d) {
         self.send(ConsoleEvent::ScanoutD3dTexture2d(scanout));
     }
 
-    #[cfg(windows)]
     async fn update_texture2d(&mut self, update: qemu_display::UpdateD3dTexture2d) {
         let (wait_tx, wait_rx) = futures::channel::oneshot::channel();
         self.send(ConsoleEvent::UpdateD3dTexture2d { update, wait_tx });
