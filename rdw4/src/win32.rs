@@ -90,10 +90,10 @@ pub(crate) fn hook_keyboard() -> Result<HHOOK> {
             return CallNextHookEx(None, code, wparam, lparam);
         };
         let h = GetForegroundWindow();
-        let kb = &*std::mem::transmute::<_, &mut KBDLLHOOKSTRUCT>(lparam);
+        let kb = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
         let mut dwmsg = kb.flags.0 << 24 | kb.scanCode << 16 | 1;
-
-        match VIRTUAL_KEY(kb.vkCode as _) {
+        let vkcode = kb.vkCode.try_into().expect("invalid keycode");
+        match VIRTUAL_KEY(vkcode) {
             VK_NUMLOCK | VK_RSHIFT => {
                 dwmsg &= !(1 << 24);
                 SendMessageA(h, wparam.0 as _, WPARAM(kb.vkCode as _), LPARAM(dwmsg as _));
