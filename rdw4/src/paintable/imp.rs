@@ -88,6 +88,8 @@ impl Paintable {
                 ctxt.make_current();
                 unsafe {
                     gl::GenTextures(1, &mut tex_id);
+                    // set_size() will set internal format to RGB
+                    // there is no alpha support
                     gl::BindTexture(gl::TEXTURE_2D, tex_id);
                     gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as _);
                     gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as _);
@@ -149,7 +151,7 @@ impl Paintable {
             gl::TexImage2D(
                 gl::TEXTURE_2D,
                 0,
-                gl::RGBA as _,
+                gl::RGB as _,
                 w as _,
                 h as _,
                 0,
