@@ -12,6 +12,9 @@ use std::cell::Cell;
 #[cfg(unix)]
 use std::os::unix::io::IntoRawFd;
 
+const XRGB_FORMAT: pixman_sys::pixman_format_code_t =
+    pixman_sys::pixman_format_code_t_PIXMAN_x8r8g8b8;
+
 mod imp {
     use super::*;
     use gtk::subclass::prelude::*;
@@ -256,7 +259,7 @@ mod imp {
                                 use ConsoleEvent::*;
                                 match e {
                                     Scanout(s) => {
-                                        if s.format != 0x20020888 {
+                                        if s.format != XRGB_FORMAT {
                                             log::warn!("Format not yet supported: {:X}", s.format);
                                             continue;
                                         }
@@ -272,7 +275,7 @@ mod imp {
                                         );
                                     }
                                     Update(u) => {
-                                        if u.format != 0x20020888 {
+                                        if u.format != XRGB_FORMAT {
                                             log::warn!("Format not yet supported: {:X}", u.format);
                                             continue;
                                         }
@@ -287,7 +290,7 @@ mod imp {
                                     }
                                     ScanoutMap { scanout, wait_tx } => {
                                         log::debug!("{scanout:?}");
-                                        if scanout.format != 0x20020888 {
+                                        if scanout.format != XRGB_FORMAT {
                                             log::warn!(
                                                 "Format not yet supported: {:X}",
                                                 scanout.format

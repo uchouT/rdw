@@ -2,7 +2,7 @@
 name = "qemu-rdw"
 version = "0.1.0"
 authors = ["Marc-André Lureau <marcandre.lureau@redhat.com>"]
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
@@ -19,6 +19,7 @@ futures-util = "0.3"
 futures = "0.3"
 async-trait = "0.1"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter" , "fmt"], default-features = false }
+pixman-sys = "0.1.0"
 
 [target.'cfg(unix)'.dependencies]
 rdw = { package = "rdw4", version = "0.1", features = ["bindings"] }
