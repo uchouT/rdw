@@ -93,7 +93,7 @@ fn device_manufacturer_product(
     let (bus, addr) = (device.bus_number(), device.address());
     let metadata = metadata(format!("/dev/bus/usb/{:03}/{:03}", bus, addr))?;
     let rdev = metadata.rdev();
-    let (major, minor) = unsafe { (libc::major(rdev), libc::minor(rdev)) };
+    let (major, minor) = (libc::major(rdev), libc::minor(rdev));
     let manufacturer = read_char_attribute(major, minor, "manufacturer");
     let product = read_char_attribute(major, minor, "product");
     if manufacturer.is_ok() || product.is_ok() {

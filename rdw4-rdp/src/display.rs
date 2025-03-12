@@ -722,11 +722,9 @@ mod imp {
             // FIXME: loop for large values?
             let windows_delta = f64::clamp(delta * -120.0, -256.0, 255.0) as i16;
             self.send_event(Event::Mouse(
-                unsafe {
-                    PtrFlags::from_bits_unchecked(
-                        flags.bits() | (windows_delta as u16 & WHEEL_ROTATION_MASK),
-                    )
-                },
+                PtrFlags::from_bits_retain(
+                    flags.bits() | (windows_delta as u16 & WHEEL_ROTATION_MASK),
+                ),
                 0,
                 0,
             ))

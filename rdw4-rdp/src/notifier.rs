@@ -30,6 +30,11 @@ struct NotifierInner {
 }
 
 #[cfg(windows)]
+unsafe impl Send for NotifierInner {}
+#[cfg(windows)]
+unsafe impl Sync for NotifierInner {}
+
+#[cfg(windows)]
 impl Drop for NotifierInner {
     fn drop(&mut self) {
         unsafe {
@@ -94,7 +99,6 @@ impl Notifier {
         {
             unsafe {
                 SetEvent(self.inner.event)
-                    .ok()
                     .map_err(|e| RdpError::Failed(format!("SetEvent failed: {}", e)))
             }
         }
@@ -114,7 +118,6 @@ impl Notifier {
         {
             unsafe {
                 ResetEvent(self.inner.event)
-                    .ok()
                     .map_err(|e| RdpError::Failed(format!("ResetEvent failed: {}", e)))
             }
         }

@@ -1,5 +1,5 @@
-pub use rdw;
 pub use freerdp;
+pub use rdw;
 
 mod display;
 pub use display::*;
