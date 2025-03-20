@@ -275,25 +275,61 @@ impl Paintable {
             "ImageTargetTexture2DOES support missing",
         ))?;
 
-        let attribs = &[
-            egl::WIDTH as _,
-            s.width as _,
-            egl::HEIGHT as _,
-            s.height as _,
-            egl::LINUX_DRM_FOURCC_EXT as _,
-            s.fourcc as _,
-            egl::DMA_BUF_PLANE0_FD_EXT as _,
-            s.fd as _,
-            egl::DMA_BUF_PLANE0_PITCH_EXT as _,
-            s.stride as _,
-            egl::DMA_BUF_PLANE0_OFFSET_EXT as _,
-            0,
-            egl::DMA_BUF_PLANE0_MODIFIER_LO_EXT as _,
-            (s.modifier & 0xffffffff) as _,
-            egl::DMA_BUF_PLANE0_MODIFIER_HI_EXT as _,
-            ((s.modifier >> 32) & 0xffffffff) as _,
-            egl::NONE as _,
+        const PLANE_FD_ATTRS: [i32; 4] = [
+            egl::DMA_BUF_PLANE0_FD_EXT,
+            egl::DMA_BUF_PLANE1_FD_EXT,
+            egl::DMA_BUF_PLANE2_FD_EXT,
+            egl::DMA_BUF_PLANE3_FD_EXT,
         ];
+        const PLANE_PITCH_ATTRS: [i32; 4] = [
+            egl::DMA_BUF_PLANE0_PITCH_EXT,
+            egl::DMA_BUF_PLANE1_PITCH_EXT,
+            egl::DMA_BUF_PLANE2_PITCH_EXT,
+            egl::DMA_BUF_PLANE3_PITCH_EXT,
+        ];
+        const PLANE_OFFSET_ATTRS: [i32; 4] = [
+            egl::DMA_BUF_PLANE0_OFFSET_EXT,
+            egl::DMA_BUF_PLANE1_OFFSET_EXT,
+            egl::DMA_BUF_PLANE2_OFFSET_EXT,
+            egl::DMA_BUF_PLANE3_OFFSET_EXT,
+        ];
+        const PLANE_MODIFIER_LO_ATTRS: [i32; 4] = [
+            egl::DMA_BUF_PLANE0_MODIFIER_LO_EXT,
+            egl::DMA_BUF_PLANE1_MODIFIER_LO_EXT,
+            egl::DMA_BUF_PLANE2_MODIFIER_LO_EXT,
+            egl::DMA_BUF_PLANE3_MODIFIER_LO_EXT,
+        ];
+        const PLANE_MODIFIER_HI_ATTRS: [i32; 4] = [
+            egl::DMA_BUF_PLANE0_MODIFIER_HI_EXT,
+            egl::DMA_BUF_PLANE1_MODIFIER_HI_EXT,
+            egl::DMA_BUF_PLANE2_MODIFIER_HI_EXT,
+            egl::DMA_BUF_PLANE3_MODIFIER_HI_EXT,
+        ];
+
+        let num_planes = s.num_planes as usize;
+        let mut attribs = Vec::<usize>::with_capacity(8 + num_planes * 10);
+
+        attribs.push(egl::WIDTH as _);
+        attribs.push(s.width as _);
+        attribs.push(egl::HEIGHT as _);
+        attribs.push(s.height as _);
+        attribs.push(egl::LINUX_DRM_FOURCC_EXT as _);
+        attribs.push(s.fourcc as _);
+
+        for plane in 0..num_planes {
+            attribs.push(PLANE_FD_ATTRS[plane] as _);
+            let fd_plane = if s.fd[plane] >= 0 { plane } else { 0 };
+            attribs.push(s.fd[fd_plane] as _);
+            attribs.push(PLANE_PITCH_ATTRS[plane] as _);
+            attribs.push(s.stride[plane] as _);
+            attribs.push(PLANE_OFFSET_ATTRS[plane] as _);
+            attribs.push(s.offset[plane] as _);
+            attribs.push(PLANE_MODIFIER_LO_ATTRS[plane] as _);
+            attribs.push((s.modifier & 0xffffffff) as _);
+            attribs.push(PLANE_MODIFIER_HI_ATTRS[plane] as _);
+            attribs.push((s.modifier >> 32 & 0xffffffff) as _);
+        }
+        attribs.push(egl::NONE as _);
 
         let img = egl
             .create_image(
@@ -301,7 +337,7 @@ impl Paintable {
                 egl::no_context(),
                 egl::LINUX_DMA_BUF_EXT,
                 egl::no_client_buffer(),
-                attribs,
+                &attribs,
             )
             .map_err(|e| {
                 glib::Error::new(crate::Error::GL, &format!("eglCreateImage() failed: {e}"))
@@ -311,10 +347,7 @@ impl Paintable {
         egl_image_target(gl::TEXTURE_2D, img.as_ptr() as gl::types::GLeglImageOES);
 
         egl.destroy_image(egl_dpy, img).map_err(|e| {
-            glib::Error::new(
-                crate::Error::GL,
-                &format!("eglDestroyImage() failed: {e}"),
-            )
+            glib::Error::new(crate::Error::GL, &format!("eglDestroyImage() failed: {e}"))
         })?;
 
         let region = cairo::Region::create_rectangle(&cairo::RectangleInt::new(

@@ -102,9 +102,7 @@ fn device_manufacturer_product(
             product.unwrap_or_else(|_| "N/A".into()),
         ))
     } else {
-        Err(std::io::Error::other(
-            "Unknown device",
-        ))
+        Err(std::io::Error::other("Unknown device"))
     }
 }
 

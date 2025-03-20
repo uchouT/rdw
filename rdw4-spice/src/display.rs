@@ -350,11 +350,13 @@ mod imp {
                                 this.obj().set_dmabuf_scanout(rdw::RdwDmabufScanout {
                                     width: scanout.width(),
                                     height: scanout.height(),
-                                    stride: scanout.stride(),
+                                    offset: [0; 4],
+                                    stride: [scanout.stride(), 0, 0, 0],
+                                    num_planes: 1,
                                     fourcc: scanout.format(),
                                     y0_top: scanout.y0_top(),
                                     modifier: 0,
-                                    fd: scanout.into_raw_fd(),
+                                    fd: [scanout.into_raw_fd(), -1, -1, -1]
                                 });
                             }
                         }));

@@ -29,6 +29,21 @@ mod imp {
     pub(crate) const DMA_BUF_PLANE0_PITCH_EXT: Int = 0x3274;
     pub(crate) const DMA_BUF_PLANE0_MODIFIER_LO_EXT: Int = 0x3443;
     pub(crate) const DMA_BUF_PLANE0_MODIFIER_HI_EXT: Int = 0x3444;
+    pub(crate) const DMA_BUF_PLANE1_FD_EXT: Int = 0x3275;
+    pub(crate) const DMA_BUF_PLANE1_OFFSET_EXT: Int = 0x3276;
+    pub(crate) const DMA_BUF_PLANE1_PITCH_EXT: Int = 0x3277;
+    pub(crate) const DMA_BUF_PLANE1_MODIFIER_LO_EXT: Int = 0x3445;
+    pub(crate) const DMA_BUF_PLANE1_MODIFIER_HI_EXT: Int = 0x3446;
+    pub(crate) const DMA_BUF_PLANE2_FD_EXT: Int = 0x3278;
+    pub(crate) const DMA_BUF_PLANE2_OFFSET_EXT: Int = 0x3279;
+    pub(crate) const DMA_BUF_PLANE2_PITCH_EXT: Int = 0x327A;
+    pub(crate) const DMA_BUF_PLANE2_MODIFIER_LO_EXT: Int = 0x3447;
+    pub(crate) const DMA_BUF_PLANE2_MODIFIER_HI_EXT: Int = 0x3448;
+    pub(crate) const DMA_BUF_PLANE3_FD_EXT: Int = 0x3440;
+    pub(crate) const DMA_BUF_PLANE3_OFFSET_EXT: Int = 0x3441;
+    pub(crate) const DMA_BUF_PLANE3_PITCH_EXT: Int = 0x3442;
+    pub(crate) const DMA_BUF_PLANE3_MODIFIER_LO_EXT: Int = 0x3449;
+    pub(crate) const DMA_BUF_PLANE3_MODIFIER_HI_EXT: Int = 0x344A;
 
     pub(crate) const DEVICE_EXT: Int = 0x322C;
     pub(crate) const D3D11_DEVICE_ANGLE: Int = 0x33A1;
@@ -144,19 +159,23 @@ impl Drop for RdwD3d11Texture2dScanout {
 pub struct RdwDmabufScanout {
     pub width: u32,
     pub height: u32,
-    pub stride: u32,
+    pub offset: [u32; 4],
+    pub stride: [u32; 4],
     pub fourcc: u32,
     pub modifier: u64,
-    pub fd: RawFd,
+    pub fd: [RawFd; 4],
     pub y0_top: bool,
+    pub num_planes: u32,
 }
 
 #[cfg(unix)]
 impl Drop for RdwDmabufScanout {
     fn drop(&mut self) {
-        if self.fd >= 0 {
-            unsafe {
-                libc::close(self.fd);
+        for &fd in &self.fd[..self.num_planes as usize] {
+            if fd >= 0 {
+                unsafe {
+                    libc::close(fd);
+                }
             }
         }
     }

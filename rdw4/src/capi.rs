@@ -178,7 +178,9 @@ pub extern "C" fn rdw_display_set_dmabuf_scanout(
     let dmabuf = RdwDmabufScanout {
         width: dmabuf.width,
         height: dmabuf.height,
+        offset: dmabuf.offset,
         stride: dmabuf.stride,
+        num_planes: dmabuf.num_planes,
         fourcc: dmabuf.fourcc,
         modifier: dmabuf.modifier,
         fd: dmabuf.fd,
