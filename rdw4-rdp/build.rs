@@ -49,7 +49,6 @@ fn main() {
             .with_include_version(true)
             .with_include_guard(format!("{}_H", name_up))
             .with_sys_include("rdw.h")
-            .with_sys_include("freerdp/freerdp.h")
             .generate()
             .unwrap()
             .write_to_file(out_include.join(format!("{}.h", name)));

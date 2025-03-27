@@ -273,23 +273,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "freerdp2"
-version = "0.2.0"
-source = "git+https://github.com/elmarco/freerdp-rs.git#040960f2c79668132384ed3de8b42c30e3d66bd8"
-dependencies = [
- "bitflags 2.9.0",
- "freerdp2-sys",
-]
-
-[[package]]
-name = "freerdp2-sys"
-version = "0.2.0"
-source = "git+https://github.com/elmarco/freerdp-rs.git#040960f2c79668132384ed3de8b42c30e3d66bd8"
-dependencies = [
- "system-deps",
-]
-
-[[package]]
 name = "futures-channel"
 version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1255,12 +1238,11 @@ dependencies = [
 
 [[package]]
 name = "rdw4-rdp"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cargo_metadata",
  "cbindgen",
  "derivative",
- "freerdp2",
  "futures-channel",
  "futures-executor",
  "futures-util",

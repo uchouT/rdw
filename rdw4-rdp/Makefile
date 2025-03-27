@@ -41,9 +41,7 @@ $(GIR): $(HEADER)
 		-L$(PREFIX)/$(LIB) \
 		-Linst/$(PREFIX)/$(LIB) \
 		--library=rdw4-rdp \
-		--include-uninstalled=freerdp2-1.0.gir \
 		--include=Rdw-4.0 --pkg rdw4 \
-		--pkg freerdp2 \
 		--output $@ \
 		$<
 
@@ -60,11 +58,9 @@ $(VAPI): $(GIR)
 		--vapidir . \
 		--metadatadir . \
 		--pkg rdw4 \
-		--pkg freerdp2 \
 		--library rdw4-rdp \
 		$< -d $(@D)
 	echo rdw4 > $(@D)/rdw4-rdp.deps
-	echo freerdp2 >> $(@D)/rdw4-rdp.deps
 
 install: all
 	cp -r inst/* $(DESTDIR)/

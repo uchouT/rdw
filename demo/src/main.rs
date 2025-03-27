@@ -14,7 +14,7 @@ use rdw::{gtk, DisplayExt};
 use rdw_spice::spice::{self, prelude::*};
 use rdw_vnc::gvnc;
 
-fn show_error(app: adw::Application, msg: &str) {
+fn show_error(app: &adw::Application, msg: &str) {
     let mut dialog = adw::MessageDialog::builder()
         .modal(true)
         .heading("Connection error")
@@ -79,16 +79,6 @@ fn rdp_display(app: &adw::Application, uri: glib::Uri) -> rdw::Display {
     };
     let host = uri.host().unwrap_or_else(|| "localhost".into());
 
-    rdp.with_settings(|s| {
-        s.set_server_port(port as _);
-        s.set_server_hostname(Some(host.as_str()))?;
-        s.set_remote_fx_codec(true);
-        // parse_command_line() sets some extra default stuff, clunky
-        s.parse_command_line(&["demo", "/rfx"], true)?;
-        Ok(())
-    })
-    .unwrap();
-
     rdp.connect_rdp_authenticate(clone!(
         #[weak]
         app,
@@ -103,11 +93,6 @@ fn rdp_display(app: &adw::Application, uri: glib::Uri) -> rdw::Display {
                 async move {
                     if let Some((username, password)) = show_password_dialog(app, true, true).await
                     {
-                        let _ = rdp.with_settings(|s| {
-                            s.set_username(Some(&username))?;
-                            s.set_password(Some(&password))?;
-                            Ok(())
-                        });
                         true
                     } else {
                         false
@@ -117,32 +102,19 @@ fn rdp_display(app: &adw::Application, uri: glib::Uri) -> rdw::Display {
         }
     ));
 
-    rdp.connect_notify_local(
-        Some("rdp-connected"),
-        clone!(
-            #[weak]
-            app,
-            move |rdp, _| {
-                let connected = rdp.property::<bool>("rdp-connected");
-                log::debug!("Connected: {connected:?}");
-                if !connected {
-                    log::warn!("Last error: {:?}", rdp.last_error());
-                    app.quit();
-                }
-            }
-        ),
-    );
-
     glib::MainContext::default().block_on(clone!(
+        #[weak]
+        app,
         #[weak]
         rdp,
         async move {
-            if rdp.rdp_connect().await.is_err() {
-                log::warn!("Last error: {:?}", rdp.last_error());
+            if let Err(err) = rdp.rdp_connect().await {
+                show_error(&app, &err.to_string());
                 app.quit();
             }
         }
     ));
+
     rdp.upcast()
 }
 
@@ -165,7 +137,7 @@ fn vnc_display(app: &adw::Application, uri: glib::Uri) -> rdw::Display {
         app,
         move |_, msg| {
             has_error2.store(true, Ordering::Relaxed);
-            show_error(app, msg);
+            show_error(&app, msg);
         }
     ));
 
@@ -239,7 +211,7 @@ fn spice_display(app: &adw::Application, uri: glib::Uri) -> rdw::Display {
                         use spice::ChannelEvent::*;
                         if event == ErrorConnect {
                             if let Some(err) = channel.error() {
-                                show_error(app, &err.to_string());
+                                show_error(&app, &err.to_string());
                             }
                         }
                     }

@@ -1,20 +1,7 @@
-use std::{sync::mpsc, thread, time::Duration};
-
-use freerdp::{
-    winpr::{wait_for_multiple_objects, WaitResult},
-    RdpErr, RdpErrConnect, RdpError, Result,
-};
-use futures_util::StreamExt;
-use glib::{clone, subclass::prelude::*, translate::*, SignalHandlerId};
+use glib::{clone, translate::*, SignalHandlerId};
 use gtk::{glib, prelude::*};
 
 use rdw::{gtk, DisplayExt};
-
-use crate::{
-    handlers::{RdpContextHandler, RdpEvent},
-    notifier::Notifier,
-    util::{format_from_mime, string_from_utf16, utf16_from_utf8},
-};
 
 #[repr(C)]
 pub struct RdwRdpDisplay {
@@ -27,52 +14,11 @@ pub struct RdwRdpDisplayClass {
 }
 
 mod imp {
-    use crate::util::mime_from_format;
-
     use super::*;
-    use freerdp::{
-        channels::{
-            cliprdr::Format,
-            disp::{MonitorFlags, MonitorLayout, Orientation},
-        },
-        client::{CliprdrFormat, Context},
-        input::{KbdFlags, PtrFlags, PtrXFlags, WHEEL_ROTATION_MASK},
-    };
-    use futures_channel::{mpsc::UnboundedReceiver, oneshot};
     use glib::subclass::Signal;
     use gtk::subclass::prelude::*;
-    use rdw::gtk::{gdk, gio, glib::MainContext};
-    use std::{
-        cell::{Cell, RefCell},
-        sync::{
-            mpsc::{Receiver, Sender},
-            Arc, Mutex, OnceLock,
-        },
-    };
-
-    #[derive(Debug)]
-    enum Event {
-        Disconnect(oneshot::Sender<Result<()>>),
-        Keyboard(KbdFlags, u16),
-        Mouse(PtrFlags, u16, u16),
-        XMouse(PtrXFlags, u16, u16),
-        MonitorLayout(Vec<MonitorLayout>),
-        ClipboardRequest(Format),
-        ClipboardFormatList(Vec<CliprdrFormat>),
-        ClipboardData(Option<Vec<u8>>),
-    }
-
-    #[derive(Default)]
-    pub(crate) struct Clipboard {
-        pub(crate) watch_id: Cell<Option<SignalHandlerId>>,
-        pub(crate) tx: RefCell<Option<(Format, futures_channel::mpsc::Sender<glib::Bytes>)>>,
-    }
-
-    impl std::fmt::Debug for Clipboard {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.debug_struct("Clipboard").field("tx", &self.tx).finish()
-        }
-    }
+    use rdw::gtk::{gdk, glib::MainContext};
+    use std::{cell::Cell, sync::OnceLock};
 
     unsafe impl ClassStruct for RdwRdpDisplayClass {
         type Type = Display;
@@ -93,13 +39,7 @@ mod imp {
     #[derive(Debug, glib::Properties)]
     #[properties(wrapper_type = super::Display)]
     pub struct Display {
-        pub(crate) context: Arc<Mutex<Box<Context<RdpContextHandler>>>>,
-        state: RefCell<Option<RdpEvent>>,
-        tx: RefCell<Option<Sender<Event>>>,
-        notifier: Notifier,
-        rx: RefCell<Option<UnboundedReceiver<RdpEvent>>>,
         last_mouse: Cell<(f64, f64)>,
-        clipboard: Clipboard,
         keymap: Cell<Option<&'static [u16]>>,
         #[property(
             get,
@@ -108,36 +48,14 @@ mod imp {
             blurb = "Whether the RDP connection is up and running"
         )]
         connected: Cell<bool>,
-        eodl_tx: RefCell<Option<oneshot::Sender<()>>>,
     }
 
     impl Default for Display {
         fn default() -> Self {
-            fn new_context() -> (Box<Context<RdpContextHandler>>, UnboundedReceiver<RdpEvent>) {
-                let (tx, rx) = futures_channel::mpsc::unbounded();
-                let mut context = Context::new(RdpContextHandler::new(tx));
-                context.settings.set_support_display_control(true);
-                context
-                    .settings
-                    .set_os_major_type(freerdp::sys::OSMAJORTYPE_UNIX);
-                context
-                    .settings
-                    .set_os_minor_type(freerdp::sys::OSMINORTYPE_NATIVE_WAYLAND);
-                (context, rx)
-            }
-
-            let (context, rx) = new_context();
             Self {
-                context: Arc::new(Mutex::new(context)),
-                state: RefCell::new(None),
-                tx: Default::default(),
-                notifier: Notifier::new().unwrap(),
                 last_mouse: Cell::new((0.0, 0.0)),
-                rx: RefCell::new(Some(rx)),
-                clipboard: Default::default(),
                 keymap: Default::default(),
                 connected: Default::default(),
-                eodl_tx: Default::default(),
             }
         }
     }
@@ -184,29 +102,7 @@ mod imp {
                     if keyval == gdk::Key::Pause.into_glib() {
                         unimplemented!()
                     }
-                    if let Some(&xt) = this.keymap.get().and_then(|m| m.get(keycode as usize)) {
-                        MainContext::default().spawn_local(glib::clone!(
-                            #[weak]
-                            this,
-                            async move {
-                                let flags = if xt & 0x100 > 0 {
-                                    KbdFlags::EXTENDED
-                                } else {
-                                    KbdFlags::empty()
-                                };
-                                if event.contains(rdw::KeyEvent::PRESS) {
-                                    let _ = this
-                                        .send_event(Event::Keyboard(flags | KbdFlags::DOWN, xt))
-                                        .await;
-                                }
-                                if event.contains(rdw::KeyEvent::RELEASE) {
-                                    let _ = this
-                                        .send_event(Event::Keyboard(flags | KbdFlags::RELEASE, xt))
-                                        .await;
-                                }
-                            }
-                        ));
-                    }
+                    if let Some(&xt) = this.keymap.get().and_then(|m| m.get(keycode as usize)) {}
                 }
             ));
 
@@ -220,9 +116,6 @@ mod imp {
                         this,
                         async move {
                             this.last_mouse.set((x, y));
-                            let _ = this
-                                .send_event(Event::Mouse(PtrFlags::MOVE, x as _, y as _))
-                                .await;
                         }
                     ));
                 }
@@ -244,9 +137,7 @@ mod imp {
                     MainContext::default().spawn_local(glib::clone!(
                         #[weak]
                         this,
-                        async move {
-                            let _ = this.mouse_click(true, button).await;
-                        }
+                        async move { todo!() }
                     ));
                 }
             ));
@@ -259,9 +150,7 @@ mod imp {
                     MainContext::default().spawn_local(glib::clone!(
                         #[weak]
                         this,
-                        async move {
-                            let _ = this.mouse_click(false, button).await;
-                        }
+                        async move { todo!() }
                     ));
                 }
             ));
@@ -278,22 +167,7 @@ mod imp {
                     MainContext::default().spawn_local(glib::clone!(
                         #[weak]
                         this,
-                        async move {
-                            let _ = this
-                                .send_event(Event::MonitorLayout(vec![MonitorLayout::new(
-                                    MonitorFlags::PRIMARY,
-                                    0,
-                                    0,
-                                    width,
-                                    height,
-                                    wmm,
-                                    hmm,
-                                    Orientation::Landscape,
-                                    scale_factor as _,
-                                    100,
-                                )]))
-                                .await;
-                        }
+                        async move { todo!() }
                     ));
                 }
             ));
@@ -307,10 +181,7 @@ mod imp {
                     MainContext::default().spawn_local(glib::clone!(
                         #[weak]
                         this,
-                        async move {
-                            let _ = this.mouse_scroll(PtrFlags::HWHEEL, dx).await;
-                            let _ = this.mouse_scroll(PtrFlags::WHEEL, dy).await;
-                        }
+                        async move { todo!() }
                     ));
                     glib::Propagation::Proceed
                 }
@@ -318,39 +189,16 @@ mod imp {
             self.obj().add_controller(ec);
 
             let cb = gdk::prelude::DisplayExt::clipboard(&self.obj().display());
-            let watch_id = cb.connect_changed(clone!(
+            cb.connect_changed(clone!(
                 #[weak(rename_to = this)]
                 self,
                 move |clipboard| {
                     let is_local = clipboard.is_local();
                     if let (false, formats) = (is_local, clipboard.formats()) {
-                        let list = formats
-                            .mime_types()
-                            .iter()
-                            .map(|m| {
-                                let id = format_from_mime(m);
-                                let name = if id.is_some() {
-                                    None
-                                } else {
-                                    Some(m.to_string())
-                                };
-                                CliprdrFormat { id, name }
-                            })
-                            .collect::<Vec<_>>();
-                        if !list.is_empty() {
-                            log::debug!(">clipboard-grab: {:?}", list);
-                            MainContext::default().spawn_local(glib::clone!(
-                                #[weak]
-                                this,
-                                async move {
-                                    let _ = this.send_event(Event::ClipboardFormatList(list)).await;
-                                }
-                            ));
-                        }
+                        todo!()
                     }
                 }
             ));
-            self.clipboard.watch_id.set(Some(watch_id));
         }
     }
 
@@ -364,479 +212,7 @@ mod imp {
 
     impl rdw::DisplayImpl for Display {}
 
-    impl Display {
-        fn dispatch_rdp_event(&self, e: RdpEvent) {
-            match e {
-                RdpEvent::Authenticate { .. } => {
-                    self.state.replace(Some(e));
-                    glib::idle_add_local(glib::clone!(
-                        #[weak(rename_to = this)]
-                        self,
-                        #[upgrade_or]
-                        glib::ControlFlow::Break,
-                        move || {
-                            let res = this.obj().emit_by_name::<bool>("rdp-authenticate", &[]);
-                            match this.state.take().unwrap() {
-                                RdpEvent::Authenticate { settings, tx } => {
-                                    let _ = tx.send(if res {
-                                        Ok(settings)
-                                    } else {
-                                        Err(RdpError::Failed("Authenticate cancelled".into()))
-                                    });
-                                }
-                                _ => {
-                                    panic!()
-                                }
-                            }
-                            glib::ControlFlow::Break
-                        }
-                    ));
-                }
-                RdpEvent::Connected => self.set_connected(true),
-                RdpEvent::Disconnected => self.set_connected(false),
-                RdpEvent::DesktopResize { w, h } => {
-                    self.obj().set_display_size(Some((w as _, h as _)));
-                }
-                RdpEvent::Update { x, y, w, h } => {
-                    let ctxt = self.context.lock().unwrap();
-                    let gdi = ctxt.gdi().unwrap();
-                    if let Some(buffer) = gdi.primary_buffer() {
-                        let stride = gdi.stride();
-                        let start = (x * 4 + y * stride) as _;
-                        let end = ((x + w) * 4 + (y + h - 1) * stride) as _;
-
-                        self.obj().update_area(
-                            x as _,
-                            y as _,
-                            w as _,
-                            h as _,
-                            stride as _,
-                            Some(&buffer[start..end]),
-                        );
-                    }
-                }
-                RdpEvent::CursorSet(cursor) => {
-                    let inner = cursor.inner;
-                    let cursor = rdw::Display::make_cursor(
-                        &inner.data,
-                        inner.width,
-                        inner.height,
-                        inner.x,
-                        inner.y,
-                        1,
-                    );
-                    self.obj().define_cursor(Some(cursor));
-                }
-                RdpEvent::CursorSetNull => {
-                    let cursor = gdk::Cursor::from_name("none", None);
-                    self.obj().define_cursor(cursor);
-                }
-                RdpEvent::CursorSetDefault => {
-                    self.obj().define_cursor(None);
-                }
-                RdpEvent::ClipboardData { data } => {
-                    if self.obj().read_only() {
-                        return;
-                    }
-                    if let Some((format, mut tx)) = self.clipboard.tx.take() {
-                        let data = match format {
-                            Format::UnicodeText => match string_from_utf16(data) {
-                                Ok(res) => res.into_bytes(),
-                                Err(e) => {
-                                    log::warn!("Invalid utf16 text: {}", e);
-                                    return;
-                                }
-                            },
-                            _ => data,
-                        };
-                        if let Err(e) = tx.try_send(glib::Bytes::from_owned(data)) {
-                            log::warn!("Failed to send clipboard data to future: {}", e);
-                        }
-                    }
-                }
-                RdpEvent::ClipboardSetContent { formats } => {
-                    if self.obj().read_only() {
-                        return;
-                    }
-                    let cb = gdk::prelude::DisplayExt::clipboard(&self.obj().display());
-                    let content = rdw::ContentProvider::new(
-                        &formats,
-                        clone!(
-                            #[weak(rename_to = this)]
-                            self,
-                            #[upgrade_or]
-                            None,
-                            move |mime, stream, prio| {
-                                log::debug!("content-provider-write: {:?}", (mime, stream));
-                                let format = match format_from_mime(mime) {
-                                    Some(format) => format,
-                                    _ => return None,
-                                };
-                                Some(Box::pin(clone!(
-                                    #[weak]
-                                    this,
-                                    #[strong]
-                                    stream,
-                                    #[upgrade_or_panic]
-                                    async move {
-                                        use futures_util::StreamExt;
-
-                                        if this.clipboard.tx.borrow().is_some() {
-                                            return Err(glib::Error::new(
-                                                gio::IOErrorEnum::Failed,
-                                                "clipboard request pending",
-                                            ));
-                                        }
-                                        let (tx, mut rx) = futures_channel::mpsc::channel(1);
-                                        this.clipboard.tx.replace(Some((format, tx)));
-                                        if this
-                                            .send_event(Event::ClipboardRequest(format))
-                                            .await
-                                            .is_ok()
-                                        {
-                                            if let Some(bytes) = rx.next().await {
-                                                return stream
-                                                    .write_bytes_future(&bytes, prio)
-                                                    .await
-                                                    .map(|_| ());
-                                            }
-                                        }
-
-                                        Err(glib::Error::new(
-                                            gio::IOErrorEnum::Failed,
-                                            "failed to request clipboard data",
-                                        ))
-                                    }
-                                )))
-                            }
-                        ),
-                    );
-                    if let Err(e) = cb.set_content(Some(&content)) {
-                        log::warn!("Failed to set clipboard content: {}", e);
-                    }
-                }
-                RdpEvent::ClipboardDataRequest { format } => {
-                    if self.obj().read_only() {
-                        return;
-                    }
-                    glib::MainContext::default().spawn_local(glib::clone!(
-                        #[weak(rename_to = this)]
-                        self,
-                        async move {
-                            let mut data = None;
-
-                            if let Some(mime) = mime_from_format(format) {
-                                let cb = gdk::prelude::DisplayExt::clipboard(&this.obj().display());
-                                let res = cb.read_future(&[mime], glib::Priority::default()).await;
-                                log::debug!("clipboard-read: {:?}", res);
-                                if let Ok((stream, _)) = res {
-                                    let out = gio::MemoryOutputStream::new_resizable();
-                                    let res = out
-                                        .splice_future(
-                                            &stream,
-                                            gio::OutputStreamSpliceFlags::CLOSE_SOURCE
-                                                | gio::OutputStreamSpliceFlags::CLOSE_TARGET,
-                                            glib::Priority::default(),
-                                        )
-                                        .await;
-                                    if res.is_ok() {
-                                        let bytes = out.steal_as_bytes();
-                                        if format.is_text() {
-                                            data = utf16_from_utf8(bytes.as_ref()).ok();
-                                        } else {
-                                            data = Some(bytes.to_vec());
-                                        }
-                                    }
-                                }
-                            }
-                            let _ = this.send_event(Event::ClipboardData(data)).await;
-                        }
-                    ));
-                }
-                RdpEvent::Eol => self.set_connected(false),
-            }
-        }
-
-        fn set_connected(&self, connected: bool) {
-            if self.connected.replace(connected) != connected {
-                self.obj().notify("rdp-connected");
-            }
-        }
-
-        pub(crate) async fn connect(&self) -> Result<()> {
-            log::trace!("RdwRdpDisplay::connect");
-
-            fn do_connect(context: &mut Arc<Mutex<Box<Context<RdpContextHandler>>>>) -> Result<()> {
-                let mut ctxt = context.lock().unwrap();
-                let res = ctxt.instance.connect();
-                if let Some(err) = ctxt.last_error() {
-                    log::warn!("connect error: {:?}", err);
-                    match err {
-                        RdpErr::RdpErrConnect(RdpErrConnect::AuthenticationFailed)
-                        | RdpErr::RdpErrConnect(RdpErrConnect::LogonFailure) => {
-                            // this should trigger RdpEvent::Authenticate on next connect()
-                            ctxt.settings.set_username(None).unwrap();
-                            ctxt.settings.set_password(None).unwrap();
-                        }
-                        _ => {}
-                    }
-                };
-                log::trace!("RdwRdpDisplay::connect res={:?}", res);
-                res
-            }
-
-            fn do_loop(
-                context: &mut Arc<Mutex<Box<Context<RdpContextHandler>>>>,
-                rx: Receiver<Event>,
-                notifier: Notifier,
-            ) -> Result<()> {
-                let res = freerdp_main_loop(context, rx, notifier);
-
-                log::debug!("freerdp thread end: {:?}", res);
-                let mut ctxt = context.lock().unwrap();
-                ctxt.handler.send_eol().unwrap();
-                res
-            }
-
-            let (conn_tx, conn_rx) = oneshot::channel();
-            let Some(mut rdp_event_rx) = self.rx.take() else {
-                return Err(RdpError::Failed("already started".into()));
-            };
-
-            let (tx, rx) = mpsc::channel();
-            self.tx.replace(Some(tx));
-
-            let notifier = self.notifier.clone();
-            let mut context = self.context.clone();
-            let thread = thread::spawn(move || {
-                let res = do_connect(&mut context);
-                let connected = res.is_ok();
-                conn_tx.send(res).unwrap();
-                if connected {
-                    let _res = do_loop(&mut context, rx, notifier);
-                } else {
-                    context.lock().unwrap().handler.send_eol().unwrap();
-                }
-            });
-
-            // the "dispatch loop"
-            MainContext::default().spawn_local(clone!(
-                #[weak(rename_to = this)]
-                self,
-                async move {
-                    while let Some(e) = rdp_event_rx.next().await {
-                        let eol = matches!(e, RdpEvent::Eol);
-                        this.dispatch_rdp_event(e);
-                        if eol {
-                            break;
-                        }
-                    }
-                    thread.join().unwrap();
-                    this.tx.replace(None);
-                    this.rx.replace(Some(rdp_event_rx));
-                    if let Some(eodl) = this.eodl_tx.take() {
-                        let _ = eodl.send(());
-                    }
-                }
-            ));
-
-            conn_rx.await.unwrap()
-        }
-
-        pub(crate) async fn disconnect(&self) -> Result<()> {
-            // since the dispatch loop is running in the same thread, this is not racy
-            // it must be running
-            if self.tx.borrow().is_none() {
-                return Ok(());
-            }
-            if self.eodl_tx.borrow().is_some() {
-                return Err(RdpError::Failed("Disconnect in progress".into()));
-            }
-
-            let (eodl_tx, eodl_rx) = oneshot::channel();
-            self.eodl_tx.replace(Some(eodl_tx));
-
-            let (tx, rx) = oneshot::channel();
-            MainContext::default().spawn_local(glib::clone!(
-                #[weak(rename_to = this)]
-                self,
-                async move {
-                    let _ = this.send_event(Event::Disconnect(tx)).await;
-                }
-            ));
-
-            let res = rx.await.unwrap_or(Ok(()));
-            let _ = eodl_rx.await;
-            self.eodl_tx.replace(None);
-            res
-        }
-
-        async fn send_event(&self, event: Event) -> Result<()> {
-            match event {
-                Event::Disconnect(_) => {}
-                _ => {
-                    if self.obj().read_only() {
-                        return Ok(());
-                    }
-                }
-            }
-
-            match &*self.tx.borrow() {
-                Some(tx) => {
-                    tx.send(event)
-                        .map_err(|_| RdpError::Failed("send() failed!".into()))?;
-                    self.notifier.notify().await
-                }
-                None => Err(RdpError::Failed("No event channel!".into())),
-            }
-        }
-
-        async fn mouse_click(&self, press: bool, button: u32) -> Result<()> {
-            let (x, y) = self.last_mouse.get();
-            let (x, y) = (x as _, y as _);
-            let mut event = match button {
-                gdk::BUTTON_PRIMARY => Event::Mouse(PtrFlags::BUTTON1, x, y),
-                gdk::BUTTON_MIDDLE => Event::Mouse(PtrFlags::BUTTON3, x, y),
-                gdk::BUTTON_SECONDARY => Event::Mouse(PtrFlags::BUTTON2, x, y),
-                8 | 97 => Event::XMouse(PtrXFlags::BUTTON1, x, y),
-                9 | 112 => Event::XMouse(PtrXFlags::BUTTON2, x, y),
-                _ => {
-                    return Err(RdpError::Failed(format!("Unhandled button {}", button)));
-                }
-            };
-            if press {
-                match event {
-                    Event::Mouse(ref mut flags, _, _) => {
-                        *flags |= PtrFlags::DOWN;
-                    }
-                    Event::XMouse(ref mut flags, _, _) => {
-                        *flags |= PtrXFlags::DOWN;
-                    }
-                    _ => unreachable!(),
-                }
-            }
-            self.send_event(event).await
-        }
-
-        async fn mouse_scroll(&self, flags: PtrFlags, delta: f64) -> Result<()> {
-            // FIXME: loop for large values?
-            let windows_delta = f64::clamp(delta * -120.0, -256.0, 255.0) as i16;
-            self.send_event(Event::Mouse(
-                PtrFlags::from_bits_retain(
-                    flags.bits() | (windows_delta as u16 & WHEEL_ROTATION_MASK),
-                ),
-                0,
-                0,
-            ))
-            .await
-        }
-
-        pub fn with_settings(
-            &self,
-            f: impl FnOnce(&mut freerdp::Settings) -> Result<()>,
-        ) -> Result<()> {
-            match &mut *self.state.borrow_mut() {
-                Some(RdpEvent::Authenticate { settings, .. }) => f(settings),
-                _ => f(&mut self.context.lock().unwrap().settings),
-            }
-        }
-    }
-
-    fn freerdp_main_loop(
-        context: &mut Arc<Mutex<Box<Context<RdpContextHandler>>>>,
-        rx: Receiver<Event>,
-        notifier: Notifier,
-    ) -> Result<()> {
-        let notifier_handle = notifier.handle()?;
-        loop {
-            let handles = {
-                let mut ctxt = context.lock().unwrap();
-                if ctxt.instance.shall_disconnect() {
-                    break;
-                }
-
-                ctxt.event_handles().unwrap()
-            };
-
-            let mut handles: Vec<_> = handles.iter().collect();
-            handles.push(&notifier_handle);
-            wait_for_multiple_objects(&handles, false, None).unwrap();
-
-            if let WaitResult::Object(_) = notifier_handle.wait(Some(&Duration::ZERO))? {
-                let e = rx
-                    .recv()
-                    .map_err(|e| RdpError::Failed(format!("recv(): {}", e)))?;
-                if !dispatch_client_event(context, e)? {
-                    break;
-                }
-                notifier.read_sync()?;
-            }
-
-            let mut ctxt = context.lock().unwrap();
-            // FIXME: we use unbounded channels to send RDP events, because we
-            // hold the context lock and it is contended with the Display/Gtk
-            // thread.. instead, we should have bounded channels but wait for
-            // free space.
-            if !ctxt.check_event_handles() {
-                if let Some(e) = ctxt.last_error() {
-                    eprintln!("{:?}", e);
-                    break;
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    fn dispatch_client_event(
-        context: &mut Arc<Mutex<Box<Context<RdpContextHandler>>>>,
-        e: Event,
-    ) -> Result<bool> {
-        let mut ctxt = context.lock().unwrap();
-        match e {
-            Event::Disconnect(tx) => {
-                let res = ctxt.instance.disconnect();
-                let _ = tx.send(res);
-                return Ok(false);
-            }
-            Event::Keyboard(flags, code) => {
-                if let Some(mut input) = ctxt.input() {
-                    input.send_keyboard_event(flags, code)?;
-                }
-            }
-            Event::Mouse(flags, x, y) => {
-                if let Some(mut input) = ctxt.input() {
-                    input.send_mouse_event(flags, x, y)?;
-                }
-            }
-            Event::XMouse(flags, x, y) => {
-                if let Some(mut input) = ctxt.input() {
-                    input.send_extended_mouse_event(flags, x, y)?;
-                }
-            }
-            Event::MonitorLayout(layout) => {
-                if let Some(disp) = ctxt.disp.as_mut() {
-                    disp.send_monitor_layout(&layout)?;
-                }
-            }
-            Event::ClipboardRequest(format) => {
-                if let Some(clip) = ctxt.cliprdr.as_mut() {
-                    clip.send_client_format_data_request(format)?;
-                }
-            }
-            Event::ClipboardFormatList(list) => {
-                if let Some(clip) = ctxt.cliprdr.as_mut() {
-                    clip.send_client_format_list(&list)?;
-                }
-            }
-            Event::ClipboardData(data) => {
-                if let Some(clip) = ctxt.cliprdr.as_mut() {
-                    clip.send_client_format_data_response(data.as_deref())?;
-                }
-            }
-        }
-        Ok(true)
-    }
+    impl Display {}
 }
 
 glib::wrapper! {
@@ -846,26 +222,6 @@ glib::wrapper! {
 impl Display {
     pub fn new() -> Self {
         glib::Object::new::<Self>()
-    }
-
-    pub fn with_settings(
-        &self,
-        f: impl FnOnce(&mut freerdp::Settings) -> Result<()>,
-    ) -> Result<()> {
-        self.imp().with_settings(f)
-    }
-
-    pub async fn rdp_connect(&self) -> Result<()> {
-        self.imp().connect().await
-    }
-
-    pub async fn rdp_disconnect(&self) -> Result<()> {
-        self.imp().disconnect().await
-    }
-
-    pub fn last_error(&self) -> Option<RdpErr> {
-        let ctxt = self.imp().context.lock().unwrap();
-        ctxt.last_error()
     }
 
     pub fn connect_rdp_authenticate<F: Fn(&Self) -> bool + 'static>(
@@ -891,6 +247,13 @@ impl Display {
                 Box::into_raw(f),
             )
         }
+    }
+
+    pub async fn rdp_connect(&self) -> Result<(), String> {
+        Ok(())
+    }
+    pub async fn rdp_disconnect(&self) -> Result<(), String> {
+        Ok(())
     }
 }
 
