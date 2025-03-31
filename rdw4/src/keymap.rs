@@ -13,9 +13,7 @@ fn get_display() -> Option<gdk::Display> {
 }
 
 pub fn keymap_xtkbd() -> Option<&'static [u16]> {
-    let Some(dpy) = get_display() else {
-        return None;
-    };
+    let dpy = get_display()?;
 
     let map = match dpy.backend() {
         #[cfg(windows)]
@@ -35,9 +33,7 @@ pub fn keymap_xtkbd() -> Option<&'static [u16]> {
 }
 
 pub fn keymap_qnum() -> Option<&'static [u16]> {
-    let Some(dpy) = get_display() else {
-        return None;
-    };
+    let dpy = get_display()?;
 
     let map = match dpy.backend() {
         #[cfg(windows)]

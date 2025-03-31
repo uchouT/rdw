@@ -1,7 +1,19 @@
 use glib::{clone, translate::*, SignalHandlerId};
 use gtk::{glib, prelude::*};
+use ironrdp::{
+    connector,
+    pdu::{
+        gcc::KeyboardType,
+        rdp::{capability_sets::MajorPlatformType, client_info::PerformanceFlags},
+    },
+};
 
-use rdw::{gtk, DisplayExt};
+use rdw::{
+    gtk::{self, subclass::prelude::*},
+    DisplayExt,
+};
+
+use crate::{Error, Result};
 
 #[repr(C)]
 pub struct RdwRdpDisplay {
@@ -14,11 +26,36 @@ pub struct RdwRdpDisplayClass {
 }
 
 mod imp {
+    use crate::{
+        cliprdr::{
+            rdp_clipboard_format, rdp_clipboard_formats, rdp_clipboard_mime,
+            rdp_clipboard_mime_from_id, PasteProgress,
+        },
+        rdp::{
+            rdp_key_event, rdp_motion, rdp_mouse_press, rdp_mouse_release, rdp_run, rdp_scroll,
+            RdpInputEvent, RdpOutputEvent,
+        },
+        util::utf16_from_utf8,
+    };
+
     use super::*;
     use glib::subclass::Signal;
-    use gtk::subclass::prelude::*;
-    use rdw::gtk::{gdk, glib::MainContext};
-    use std::{cell::Cell, sync::OnceLock};
+    use gtk::{gdk::Clipboard, gio};
+    use ironrdp::{
+        cliprdr::{
+            backend::ClipboardMessage,
+            pdu::{ClipboardFormatId, OwnedFormatDataResponse},
+        },
+        connector::Config,
+        pdu::geometry::Rectangle,
+    };
+    use rdw::gtk::gdk;
+    use std::{
+        cell::{Cell, RefCell},
+        thread::JoinHandle,
+    };
+    use tokio::sync::{mpsc, oneshot};
+    use tracing::{debug, instrument, trace, warn};
 
     unsafe impl ClassStruct for RdwRdpDisplayClass {
         type Type = Display;
@@ -39,8 +76,11 @@ mod imp {
     #[derive(Debug, glib::Properties)]
     #[properties(wrapper_type = super::Display)]
     pub struct Display {
+        cb_watch_id: RefCell<Option<SignalHandlerId>>,
         last_mouse: Cell<(f64, f64)>,
         keymap: Cell<Option<&'static [u16]>>,
+        rdp_thread: RefCell<Option<JoinHandle<()>>>,
+        input_event_tx: RefCell<Option<mpsc::UnboundedSender<RdpInputEvent>>>,
         #[property(
             get,
             name = "rdp-connected",
@@ -53,9 +93,12 @@ mod imp {
     impl Default for Display {
         fn default() -> Self {
             Self {
+                cb_watch_id: RefCell::new(None),
                 last_mouse: Cell::new((0.0, 0.0)),
                 keymap: Default::default(),
                 connected: Default::default(),
+                rdp_thread: Default::default(),
+                input_event_tx: Default::default(),
             }
         }
     }
@@ -79,14 +122,7 @@ mod imp {
         }
 
         fn signals() -> &'static [Signal] {
-            static SIGNALS: OnceLock<Vec<Signal>> = OnceLock::new();
-            SIGNALS
-                .get_or_init(|| {
-                    vec![Signal::builder("rdp-authenticate")
-                        .return_type_from(<bool>::static_type())
-                        .build()]
-                })
-                .as_ref()
+            &[]
         }
 
         fn constructed(&self) {
@@ -98,11 +134,12 @@ mod imp {
                 #[weak(rename_to = this)]
                 self,
                 move |_, keyval, keycode, event| {
-                    log::debug!("key-event: {:?}", (keyval, keycode, event));
-                    if keyval == gdk::Key::Pause.into_glib() {
-                        unimplemented!()
-                    }
-                    if let Some(&xt) = this.keymap.get().and_then(|m| m.get(keycode as usize)) {}
+                    trace!("key-event: {:?}", (keyval, keycode, event));
+                    let Some(&xt) = this.keymap.get().and_then(|m| m.get(keycode as usize)) else {
+                        return;
+                    };
+                    let fp = rdp_key_event(xt, event);
+                    this.send_event(RdpInputEvent::FastPath(fp));
                 }
             ));
 
@@ -110,14 +147,10 @@ mod imp {
                 #[weak(rename_to = this)]
                 self,
                 move |_, x, y| {
-                    log::debug!("motion: {:?}", (x, y));
-                    MainContext::default().spawn_local(glib::clone!(
-                        #[weak]
-                        this,
-                        async move {
-                            this.last_mouse.set((x, y));
-                        }
-                    ));
+                    trace!("motion: {:?}", (x, y));
+                    let fp = rdp_motion(x as _, y as _);
+                    this.send_event(RdpInputEvent::FastPath(fp));
+                    this.last_mouse.set((x, y));
                 }
             ));
 
@@ -125,7 +158,7 @@ mod imp {
                 #[weak(rename_to = _this)]
                 self,
                 move |_, dx, dy| {
-                    log::debug!("motion-relative: {:?}", (dx, dy));
+                    trace!("motion-relative: {:?}", (dx, dy));
                 }
             ));
 
@@ -133,12 +166,10 @@ mod imp {
                 #[weak(rename_to = this)]
                 self,
                 move |_, button| {
-                    log::debug!("mouse-press: {:?}", button);
-                    MainContext::default().spawn_local(glib::clone!(
-                        #[weak]
-                        this,
-                        async move { todo!() }
-                    ));
+                    trace!("mouse-press: {:?}", button);
+                    let (x_position, y_position) = this.last_mouse.get();
+                    let fp = rdp_mouse_press(x_position as _, y_position as _, button);
+                    this.send_event(RdpInputEvent::FastPath(fp));
                 }
             ));
 
@@ -146,12 +177,10 @@ mod imp {
                 #[weak(rename_to = this)]
                 self,
                 move |_, button| {
-                    log::debug!("mouse-release: {:?}", button);
-                    MainContext::default().spawn_local(glib::clone!(
-                        #[weak]
-                        this,
-                        async move { todo!() }
-                    ));
+                    trace!("mouse-release: {:?}", button);
+                    let (x_position, y_position) = this.last_mouse.get();
+                    let fp = rdp_mouse_release(x_position as _, y_position as _, button);
+                    this.send_event(RdpInputEvent::FastPath(fp));
                 }
             ));
 
@@ -160,15 +189,22 @@ mod imp {
                 self,
                 move |_, width, height, wmm, hmm| {
                     let scale_factor = this.obj().scale_factor() * 100;
-                    log::debug!(
+                    trace!(
                         "resize-request: {:?}",
                         (width, height, wmm, hmm, scale_factor)
                     );
-                    MainContext::default().spawn_local(glib::clone!(
-                        #[weak]
-                        this,
-                        async move { todo!() }
-                    ));
+                    let width = width.try_into().expect("Failed to convert width");
+                    let height = height.try_into().expect("Failed to convert height");
+                    let scale_factor = scale_factor
+                        .try_into()
+                        .expect("Failed to convert scale factor");
+                    let physical_size = Some((wmm, hmm));
+                    this.send_event(RdpInputEvent::Resize {
+                        width,
+                        height,
+                        scale_factor,
+                        physical_size,
+                    });
                 }
             ));
 
@@ -178,27 +214,31 @@ mod imp {
                 self,
                 #[upgrade_or_panic]
                 move |_, dx, dy| {
-                    MainContext::default().spawn_local(glib::clone!(
-                        #[weak]
-                        this,
-                        async move { todo!() }
-                    ));
+                    trace!(?dx, ?dy, "scroll");
+                    let (x_position, y_position) = this.last_mouse.get();
+                    let fp = rdp_scroll(dx as _, dy as _, x_position as _, y_position as _);
+                    this.send_event(RdpInputEvent::FastPath(fp));
                     glib::Propagation::Proceed
                 }
             ));
             self.obj().add_controller(ec);
 
             let cb = gdk::prelude::DisplayExt::clipboard(&self.obj().display());
-            cb.connect_changed(clone!(
+            let watch_id = cb.connect_changed(clone!(
                 #[weak(rename_to = this)]
                 self,
-                move |clipboard| {
-                    let is_local = clipboard.is_local();
-                    if let (false, formats) = (is_local, clipboard.formats()) {
-                        todo!()
-                    }
+                move |_| {
+                    this.clipboard_send_initiate_copy(false);
                 }
             ));
+            self.cb_watch_id.replace(Some(watch_id));
+        }
+
+        fn dispose(&self) {
+            if let Some(watch_id) = self.cb_watch_id.take() {
+                let cb = gdk::prelude::DisplayExt::clipboard(&self.obj().display());
+                cb.disconnect(watch_id);
+            }
         }
     }
 
@@ -212,7 +252,284 @@ mod imp {
 
     impl rdw::DisplayImpl for Display {}
 
-    impl Display {}
+    impl Display {
+        #[instrument]
+        pub(crate) async fn connect(&self, domain: &str, port: u16, config: Config) -> Result<()> {
+            if self.rdp_thread.borrow().is_some() {
+                return Err(Error::AlreadyConnected);
+            }
+
+            let (input_event_tx, mut input_event_rx) = RdpInputEvent::create_channel();
+            let (output_event_tx, mut output_event_rx) = RdpOutputEvent::create_channel();
+            let rdp_cb_paste = PasteProgress::new();
+
+            let domain = domain.to_owned();
+            let cb_paste = rdp_cb_paste.clone();
+            let t = std::thread::spawn(move || {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .unwrap();
+
+                rt.block_on(async {
+                    rdp_run(
+                        &domain,
+                        port,
+                        config,
+                        &mut input_event_rx,
+                        &output_event_tx,
+                        cb_paste,
+                    )
+                    .await;
+                });
+            });
+
+            self.rdp_thread.borrow_mut().replace(t);
+            self.input_event_tx.replace(Some(input_event_tx));
+            let clipboard = gdk::prelude::DisplayExt::clipboard(&self.obj().display());
+
+            let (tx, wait_connect_rx) = oneshot::channel();
+            let mut tx = Some(tx);
+
+            glib::spawn_future_local(clone!(
+                #[weak(rename_to = this)]
+                self,
+                async move {
+                    while let Some(event) = output_event_rx.recv().await {
+                        match event {
+                            RdpOutputEvent::Connected => {
+                                if let Some(tx) = tx.take() {
+                                    tx.send(Ok(())).unwrap();
+                                }
+                                this.set_connected(true);
+                            }
+                            RdpOutputEvent::Terminated(result) => {
+                                if let Err(err) = result {
+                                    if let Some(tx) = tx.take() {
+                                        tx.send(Err(err)).unwrap();
+                                    }
+                                }
+                                this.set_connected(false);
+                            }
+                            RdpOutputEvent::GraphicsUpdate { image, region } => {
+                                trace!("Graphics update received");
+                                let image = image.lock().unwrap();
+                                this.obj().set_display_size(Some((
+                                    usize::from(image.width()),
+                                    usize::from(image.height()),
+                                )));
+                                let data = image.data_for_rect(&region);
+                                let stride = image.stride() as i32;
+                                let (x, y, w, h) =
+                                    (region.left, region.top, region.width(), region.height());
+                                this.obj().update_area(
+                                    x.into(),
+                                    y.into(),
+                                    w.into(),
+                                    h.into(),
+                                    stride,
+                                    Some(data),
+                                );
+                            }
+                            RdpOutputEvent::PointerBitmap(pointer) => {
+                                let cursor = rdw::Display::make_cursor(
+                                    &pointer.bitmap_data,
+                                    pointer.width.into(),
+                                    pointer.height.into(),
+                                    pointer.hotspot_x.into(),
+                                    pointer.hotspot_y.into(),
+                                    1,
+                                );
+                                this.obj().define_cursor(Some(cursor));
+                            }
+                            RdpOutputEvent::PointerDefault => {
+                                this.obj().define_cursor(None);
+                            }
+                            RdpOutputEvent::PointerHidden => {
+                                let cursor = gdk::Cursor::from_name("none", None);
+                                this.obj().define_cursor(cursor);
+                            }
+                            RdpOutputEvent::PointerPosition { x, y } => {
+                                this.obj().set_cursor_position(Some((x.into(), y.into())));
+                            }
+                            RdpOutputEvent::ClipboardRequestFormatList => {
+                                this.clipboard_send_initiate_copy(true);
+                            }
+                            RdpOutputEvent::Clipboard(message) => {
+                                this.rdp_clipboard(&clipboard, message, rdp_cb_paste.clone());
+                            }
+                        }
+                    }
+                }
+            ));
+
+            wait_connect_rx.await.unwrap()
+        }
+
+        fn clipboard_send_initiate_copy(&self, request: bool) {
+            let cb = gdk::prelude::DisplayExt::clipboard(&self.obj().display());
+            if cb.is_local() && !request {
+                trace!("not sending clipboard copy, since it's local");
+                return;
+            }
+
+            let formats = if cb.is_local() {
+                Vec::new()
+            } else {
+                rdp_clipboard_formats(cb.formats())
+            };
+
+            let event = if request {
+                RdpInputEvent::ClipboardResponseInitialCopy(formats)
+            } else {
+                let msg = ClipboardMessage::SendInitiateCopy(formats);
+                RdpInputEvent::Clipboard(msg)
+            };
+            self.send_event(event)
+        }
+
+        fn rdp_clipboard(
+            &self,
+            clipboard: &Clipboard,
+            message: ClipboardMessage,
+            rdp_cb_paste: PasteProgress,
+        ) {
+            if self.obj().read_only() {
+                trace!("dropping cb event, since we are read only");
+                return;
+            }
+
+            match message {
+                ClipboardMessage::SendInitiateCopy(formats) => {
+                    if rdp_cb_paste.is_some() {
+                        warn!("Clipboard paste already in progress");
+                        return;
+                    }
+                    let formats: Vec<_> = formats
+                        .iter()
+                        .filter_map(|f| rdp_clipboard_mime(f))
+                        .collect();
+                    let provider = rdw::ContentProvider::new(
+                        &formats,
+                        clone!(
+                            #[weak(rename_to = this)]
+                            self,
+                            #[upgrade_or]
+                            None,
+                            move |mime, stream, prio| {
+                                debug!("content-provider-write: {:?}", (mime, stream));
+                                let format = rdp_clipboard_format(mime);
+                                Some(Box::pin(clone!(
+                                    #[weak]
+                                    this,
+                                    #[strong]
+                                    stream,
+                                    #[strong]
+                                    rdp_cb_paste,
+                                    #[upgrade_or_panic]
+                                    async move {
+                                        let (tx, rx) = oneshot::channel();
+                                        rdp_cb_paste.set(format.id(), tx);
+                                        this.send_event(RdpInputEvent::Clipboard(
+                                            ClipboardMessage::SendInitiatePaste(format.id()),
+                                        ));
+                                        if let Ok(bytes) = rx.await {
+                                            let bytes = glib::Bytes::from_owned(bytes);
+                                            return stream
+                                                .write_bytes_future(&bytes, prio)
+                                                .await
+                                                .map(|_| ());
+                                        }
+
+                                        Err(glib::Error::new(
+                                            gio::IOErrorEnum::Failed,
+                                            "failed to request clipboard data",
+                                        ))
+                                    }
+                                )))
+                            }
+                        ),
+                    );
+                    let res = clipboard.set_content(Some(&provider));
+                    trace!(?res);
+                }
+                ClipboardMessage::SendInitiatePaste(format_id) => {
+                    glib::MainContext::default().spawn_local(glib::clone!(
+                        #[weak(rename_to = this)]
+                        self,
+                        async move {
+                            let mut data = None;
+
+                            if let Some(mime) = rdp_clipboard_mime_from_id(format_id) {
+                                let cb = gdk::prelude::DisplayExt::clipboard(&this.obj().display());
+                                let res = cb.read_future(&[mime], glib::Priority::default()).await;
+                                debug!(?res, "clipboard-read");
+                                if let Ok((stream, _)) = res {
+                                    let out = gio::MemoryOutputStream::new_resizable();
+                                    let res = out
+                                        .splice_future(
+                                            &stream,
+                                            gio::OutputStreamSpliceFlags::CLOSE_SOURCE
+                                                | gio::OutputStreamSpliceFlags::CLOSE_TARGET,
+                                            glib::Priority::default(),
+                                        )
+                                        .await;
+                                    if res.is_ok() {
+                                        let bytes = out.steal_as_bytes();
+                                        if format_id == ClipboardFormatId::CF_UNICODETEXT {
+                                            data = utf16_from_utf8(bytes.as_ref()).ok();
+                                        } else {
+                                            data = Some(bytes.to_vec());
+                                        }
+                                    }
+                                }
+                            }
+
+                            let resp = if let Some(data) = data {
+                                OwnedFormatDataResponse::new_data(data)
+                            } else {
+                                OwnedFormatDataResponse::new_error()
+                            };
+                            this.send_event(RdpInputEvent::Clipboard(
+                                ClipboardMessage::SendFormatData(resp),
+                            ));
+                        }
+                    ));
+                }
+                ClipboardMessage::Error(clipboard_error) => {
+                    warn!("Clipboard error: {}", clipboard_error);
+                }
+                ClipboardMessage::SendFormatData(_) => unreachable!(), // handled directly in cliprdr.rs
+            }
+        }
+
+        fn send_event(&self, event: RdpInputEvent) {
+            let tx = self.input_event_tx.borrow();
+            let Some(ref tx) = *tx else {
+                return;
+            };
+            let _ = tx.send(event);
+        }
+
+        fn set_connected(&self, connected: bool) {
+            if self.connected.replace(connected) != connected {
+                self.obj().notify("rdp-connected");
+            }
+        }
+
+        #[instrument]
+        pub(crate) async fn disconnect(&self) -> Result<()> {
+            let Some(tx) = self.input_event_tx.take() else {
+                trace!("disconnect: not connected");
+                return Ok(());
+            };
+            tx.send(RdpInputEvent::Close).unwrap();
+            if let Some(rdp_thread) = self.rdp_thread.take() {
+                let _ = rdp_thread.join();
+            }
+            Ok(())
+        }
+    }
 }
 
 glib::wrapper! {
@@ -224,36 +541,61 @@ impl Display {
         glib::Object::new::<Self>()
     }
 
-    pub fn connect_rdp_authenticate<F: Fn(&Self) -> bool + 'static>(
+    pub async fn rdp_connect(
         &self,
-        f: F,
-    ) -> SignalHandlerId {
-        unsafe extern "C" fn connect_trampoline<P, F: Fn(&P) -> bool + 'static>(
-            this: *mut RdwRdpDisplay,
-            f: glib::ffi::gpointer,
-        ) -> bool
-        where
-            P: IsA<Display>,
-        {
-            let f = &*(f as *const F);
-            f(Display::from_glib_borrow(this).unsafe_cast_ref::<P>())
-        }
-        unsafe {
-            let f: Box<F> = Box::new(f);
-            glib::signal::connect_raw(
-                self.as_ptr() as *mut glib::gobject_ffi::GObject,
-                b"rdp-authenticate\0".as_ptr() as *const _,
-                Some(std::mem::transmute(connect_trampoline::<Self, F> as usize)),
-                Box::into_raw(f),
-            )
-        }
+        domain: &str,
+        port: u16,
+        username: &str,
+        password: &str,
+    ) -> Result<()> {
+        let config = connector::Config {
+            credentials: connector::Credentials::UsernamePassword {
+                username: username.to_owned(),
+                password: password.to_owned(),
+            },
+            domain: None,
+            enable_tls: true,
+            enable_credssp: true,
+            keyboard_type: KeyboardType::IbmEnhanced,
+            keyboard_subtype: 0,
+            keyboard_layout: 0, // the server SHOULD use the default active input locale identifier
+            keyboard_functional_keys_count: 12,
+            ime_file_name: "".to_owned(),
+            dig_product_id: "".to_owned(),
+            desktop_size: connector::DesktopSize {
+                width: 1920,
+                height: 1080,
+            },
+            desktop_scale_factor: 0, // Default to 0 per FreeRDP
+            bitmap: None,
+            client_build: 0,
+            client_name: whoami::fallible::hostname().unwrap_or_else(|_| "ironrdp".to_owned()),
+            // NOTE: hardcode this value like in freerdp
+            // https://github.com/FreeRDP/FreeRDP/blob/4e24b966c86fdf494a782f0dfcfc43a057a2ea60/libfreerdp/core/settings.c#LL49C34-L49C70
+            client_dir: "C:\\Windows\\System32\\mstscax.dll".to_owned(),
+            platform: match whoami::platform() {
+                whoami::Platform::Windows => MajorPlatformType::WINDOWS,
+                whoami::Platform::Linux => MajorPlatformType::UNIX,
+                whoami::Platform::MacOS => MajorPlatformType::MACINTOSH,
+                whoami::Platform::Ios => MajorPlatformType::IOS,
+                whoami::Platform::Android => MajorPlatformType::ANDROID,
+                _ => MajorPlatformType::UNSPECIFIED,
+            },
+            hardware_id: None,
+            license_cache: None,
+            no_server_pointer: false,
+            autologon: true,
+            no_audio_playback: false,
+            request_data: None,
+            pointer_software_rendering: false,
+            performance_flags: PerformanceFlags::default(),
+        };
+
+        self.imp().connect(domain, port, config).await
     }
 
-    pub async fn rdp_connect(&self) -> Result<(), String> {
-        Ok(())
-    }
-    pub async fn rdp_disconnect(&self) -> Result<(), String> {
-        Ok(())
+    pub async fn rdp_disconnect(&self) -> Result<()> {
+        self.imp().disconnect().await
     }
 }
 

@@ -11,7 +11,11 @@ struct GstAudioOut {
 
 impl GstAudioOut {
     fn new(caps: &str) -> Result<Self, Box<dyn Error>> {
-        let pipeline = &format!("appsrc name=src is-live=1 do-timestamp=0 format=time caps=\"{}\" ! queue ! audioconvert ! audioresample ! autoaudiosink name=sink", caps);
+        let pipeline = &format!(
+            "appsrc name=src is-live=1 do-timestamp=0 format=time caps=\"{}\" !\
+            queue ! decodebin ! audioconvert ! audioresample ! autoaudiosink name=sink",
+            caps
+        );
         let pipeline = gst::parse::launch(pipeline)?;
         let pipeline = pipeline.dynamic_cast::<gst::Pipeline>().unwrap();
         let src = pipeline
@@ -32,7 +36,11 @@ struct GstAudioIn {
 
 impl GstAudioIn {
     fn new(caps: &str) -> Result<Self, Box<dyn Error>> {
-        let pipeline = &format!("autoaudiosrc name=src ! queue ! audioconvert ! audioresample ! appsink caps=\"{}\" name=sink", caps);
+        let pipeline = &format!(
+            "autoaudiosrc name=src ! queue ! audioconvert ! audioresample !\
+            appsink caps=\"{}\" name=sink",
+            caps
+        );
         let pipeline = gst::parse::launch(pipeline)?;
         let pipeline = pipeline.dynamic_cast::<gst::Pipeline>().unwrap();
         let sink = pipeline
@@ -59,6 +67,21 @@ impl GstAudio {
         gst::init()?;
 
         Ok(Self::default())
+    }
+
+    #[allow(clippy::unused_self)]
+    pub fn can_decode(&self, mime: &str) -> Result<bool, Box<dyn Error>> {
+        let pipeline = gst::Pipeline::new();
+        pipeline.add(&gst::ElementFactory::make("decodebin").build()?)?;
+        let can_decode = if let Some(sink) = pipeline.pad_template("sink") {
+            use std::str::FromStr;
+            let caps = gst::Caps::from_str(mime).unwrap();
+            sink.caps().can_intersect(&caps)
+        } else {
+            false
+        };
+
+        Ok(can_decode)
     }
 
     pub fn init_out(&mut self, id: u64, caps: &str) -> Result<(), Box<dyn Error>> {

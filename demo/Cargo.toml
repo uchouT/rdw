@@ -6,13 +6,18 @@ edition = "2021"
 
 [features]
 default = ["wayland", "x11"]
-bindings = ["rdw/bindings", "rdw-rdp/bindings", "rdw-spice/bindings", "rdw-vnc/bindings"]
+bindings = [
+    "rdw/bindings",
+    "rdw-rdp/bindings",
+    "rdw-spice/bindings",
+    "rdw-vnc/bindings",
+]
 wayland = ["rdw/wayland"]
 x11 = ["rdw/x11"]
 
 [dependencies]
-log = "0.4"
-env_logger = { version = "0.11", default-features = false }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rdw = { package = "rdw4", path = "../rdw4", default-features = false }
 rdw-rdp = { package = "rdw4-rdp", path = "../rdw4-rdp", default-features = false }
 rdw-spice = { package = "rdw4-spice", path = "../rdw4-spice", default-features = false }

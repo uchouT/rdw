@@ -3,7 +3,7 @@ use std::{
     string::FromUtf16Error,
 };
 
-pub(crate) fn string_from_utf16(data: Vec<u8>) -> Result<String, FromUtf16Error> {
+pub(crate) fn string_from_utf16(data: &[u8]) -> Result<String, FromUtf16Error> {
     let utf16: Vec<u16> = data
         .chunks_exact(2)
         .map(|a| u16::from_ne_bytes([a[0], a[1]]))

@@ -901,13 +901,12 @@ impl Display {
         self.obj()
             .root()
             .and_then(|r| r.native())
-            .map(|n| n.surface())
-            .flatten()
+            .and_then(|n| n.surface())
             .and_then(|s| s.downcast::<gdk::Toplevel>().ok())
     }
 
     fn surface(&self) -> Option<gdk::Surface> {
-        self.obj().native().map(|n| n.surface()).flatten()
+        self.obj().native().and_then(|n| n.surface())
     }
 
     #[cfg(windows)]

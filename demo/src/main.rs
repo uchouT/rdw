@@ -1,5 +1,6 @@
 use std::{
     cell::RefCell,
+    rc::Rc,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -13,6 +14,8 @@ use gtk::{gdk, gio, glib};
 use rdw::{gtk, DisplayExt};
 use rdw_spice::spice::{self, prelude::*};
 use rdw_vnc::gvnc;
+use tracing::debug;
+use tracing_subscriber::EnvFilter;
 
 fn show_error(app: &adw::Application, msg: &str) {
     let mut dialog = adw::MessageDialog::builder()
@@ -26,11 +29,10 @@ fn show_error(app: &adw::Application, msg: &str) {
 }
 
 async fn show_password_dialog(
-    app: adw::Application,
+    app: &adw::Application,
     with_username: bool,
     with_password: bool,
 ) -> Option<(String, String)> {
-    dbg!();
     let grid = gtk::Grid::builder()
         .hexpand(true)
         .vexpand(true)
@@ -79,28 +81,22 @@ fn rdp_display(app: &adw::Application, uri: glib::Uri) -> rdw::Display {
     };
     let host = uri.host().unwrap_or_else(|| "localhost".into());
 
-    rdp.connect_rdp_authenticate(clone!(
-        #[weak]
-        app,
-        #[upgrade_or]
-        false,
-        move |rdp| {
-            glib::MainContext::default().block_on(clone!(
-                #[weak]
-                app,
-                #[upgrade_or]
-                false,
-                async move {
-                    if let Some((username, password)) = show_password_dialog(app, true, true).await
-                    {
-                        true
-                    } else {
-                        false
-                    }
+    rdp.connect_notify_local(
+        Some("rdp-connected"),
+        clone!(
+            #[weak]
+            app,
+            move |rdp, _| {
+                let connected = rdp.property::<bool>("rdp-connected");
+                debug!(?connected);
+                if !connected {
+                    // log::warn!("Last error: {:?}", rdp.last_error());
+                    dbg!();
+                    app.quit();
                 }
-            ))
-        }
-    ));
+            }
+        ),
+    );
 
     glib::MainContext::default().block_on(clone!(
         #[weak]
@@ -108,9 +104,16 @@ fn rdp_display(app: &adw::Application, uri: glib::Uri) -> rdw::Display {
         #[weak]
         rdp,
         async move {
-            if let Err(err) = rdp.rdp_connect().await {
-                show_error(&app, &err.to_string());
+            let Some((username, password)) = show_password_dialog(&app, true, true).await else {
                 app.quit();
+                return;
+            };
+
+            if let Err(err) = rdp
+                .rdp_connect(&host, port as _, &username, &password)
+                .await
+            {
+                show_error(&app, &err.to_string());
             }
         }
     ));
@@ -166,7 +169,7 @@ fn vnc_display(app: &adw::Application, uri: glib::Uri) -> rdw::Display {
                 conn,
                 async move {
                     if let Some((username, password)) = show_password_dialog(
-                        app,
+                        &app,
                         creds.contains(&Username),
                         creds.contains(&Password),
                     )
@@ -248,11 +251,11 @@ fn make_display(app: &adw::Application, mut uri: String) -> rdw::Display {
 }
 
 fn main() {
-    env_logger::init();
-    #[cfg(feature = "bindings")]
-    unsafe {
-        rdw::setup_logger(log::logger(), log::max_level()).unwrap();
-    }
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .with_file(true) // Enable file name
+        .with_line_number(true) // Enable line number
+        .init();
 
     let app = adw::Application::new(
         Some("org.gnome.rdw.demo"),
@@ -294,7 +297,7 @@ fn main() {
         -1
     });
 
-    let display = Arc::new(RefCell::new(None));
+    let display = Rc::new(RefCell::new(None));
 
     let dpy = display.clone();
     app.connect_command_line(move |app, cl| {
@@ -352,7 +355,7 @@ fn main() {
     app.run();
 }
 
-fn build_ui(app: &adw::Application, display: Arc<RefCell<Option<rdw::Display>>>) {
+fn build_ui(app: &adw::Application, display: Rc<RefCell<Option<rdw::Display>>>) {
     let ui_src = include_str!("demo.ui");
     let builder = gtk::Builder::new();
     builder

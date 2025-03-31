@@ -83,9 +83,7 @@ mod imp {
         #[cfg(any(feature = "wayland", windows, feature = "x11"))]
         use gtk::glib::object::Cast;
 
-        let Some(_dpy) = ctxt.display() else {
-            return None;
-        };
+        let _dpy = ctxt.display()?;
 
         #[cfg(feature = "wayland")]
         if let Ok(dpy) = _dpy.clone().downcast::<gdk_wl::WaylandDisplay>() {

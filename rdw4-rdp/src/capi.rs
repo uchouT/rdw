@@ -1,7 +1,8 @@
-use std::os::raw::c_void;
+use std::ffi::CStr;
+use std::os::raw::{c_char, c_void};
 
 use rdw::gtk::{
-    self, gio,
+    gio,
     glib::{self, translate::*},
     prelude::*,
 };
@@ -32,6 +33,10 @@ pub extern "C" fn rdw_rdp_display_new() -> *mut RdwRdpDisplay {
 #[no_mangle]
 pub unsafe extern "C" fn rdw_rdp_display_connect_async(
     dpy: *mut RdwRdpDisplay,
+    domain: *const c_char,
+    port: u16,
+    username: *const c_char,
+    password: *const c_char,
     _cancellable: *mut gio::ffi::GCancellable,
     callback: gio::ffi::GAsyncReadyCallback,
     user_data: *mut c_void,
@@ -48,9 +53,12 @@ pub unsafe extern "C" fn rdw_rdp_display_connect_async(
 
     let task = gio::LocalTask::new(Some(&this), gio::Cancellable::NONE, closure);
 
+    let domain = CStr::from_ptr(domain).to_str().unwrap().to_owned();
+    let username = CStr::from_ptr(username).to_str().unwrap().to_owned();
+    let password = CStr::from_ptr(password).to_str().unwrap().to_owned();
     glib::MainContext::default().spawn_local(async move {
         let res = this
-            .rdp_connect()
+            .rdp_connect(&domain, port, &username, &password)
             .await
             .map_err(|e| {
                 let msg = format!("RDP connect failed: {e}");

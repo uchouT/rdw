@@ -52,7 +52,7 @@ impl PaintableImpl for Paintable {
 
     fn snapshot(&self, snapshot: &gdk::Snapshot, width: f64, height: f64) {
         if let Some(texture) = self.texture.borrow().as_ref() {
-            let flip = self.y0_top.get().unwrap_or(true);
+            let flip = !self.y0_top.get().unwrap_or(true);
             if flip {
                 snapshot.save();
                 snapshot.translate(&graphene::Point::new(0.0, height as _));
@@ -139,6 +139,9 @@ impl Paintable {
     }
 
     pub(crate) fn set_size(&self, w: usize, h: usize) -> Result<(), glib::error::Error> {
+        if self.size() == (w as _, h as _) {
+            return Ok(());
+        }
         let ctxt = self.gl_context()?;
         ctxt.make_current();
 
@@ -190,6 +193,7 @@ impl Paintable {
     ) -> Result<(), glib::error::Error> {
         let ctxt = self.gl_context()?;
         ctxt.make_current();
+        unsafe { gl::GetError() };
 
         let (max_w, max_h) = self.size();
         let x = x.clamp(0, max_w);
@@ -287,7 +291,7 @@ impl Paintable {
             egl::DMA_BUF_PLANE0_MODIFIER_LO_EXT as _,
             (s.modifier & 0xffffffff) as _,
             egl::DMA_BUF_PLANE0_MODIFIER_HI_EXT as _,
-            (s.modifier >> 32 & 0xffffffff) as _,
+            ((s.modifier >> 32) & 0xffffffff) as _,
             egl::NONE as _,
         ];
 

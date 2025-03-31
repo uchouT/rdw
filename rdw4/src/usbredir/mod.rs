@@ -52,8 +52,8 @@ impl UsbRedir {
             let f: Box_<F> = Box_::new(f);
             connect_raw(
                 self.as_ptr() as *mut _,
-                b"device-state-set\0".as_ptr() as *const _,
-                Some(transmute::<_, unsafe extern "C" fn()>(
+                c"device-state-set".as_ptr() as *const _,
+                Some(transmute::<*const (), unsafe extern "C" fn()>(
                     state_set_trampoline::<F> as *const (),
                 )),
                 Box_::into_raw(f),

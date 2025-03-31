@@ -62,19 +62,11 @@ impl Display {
         use gdk::gdk_pixbuf::*;
 
         let snap = gtk::Snapshot::new();
-        let Some(parent) = widget.parent() else {
-            return None;
-        };
-        let Some(native) = widget.native() else {
-            return None;
-        };
+        let parent = widget.parent()?;
+        let native = widget.native()?;
         parent.snapshot_child(widget, &snap);
-        let Some(node) = snap.to_node() else {
-            return None;
-        };
-        let Some(renderer) = native.renderer() else {
-            return None;
-        };
+        let node = snap.to_node()?;
+        let renderer = native.renderer()?;
         let texture = renderer.render_texture(node, None);
         let mut down = gdk::TextureDownloader::new(&texture);
         down.set_format(gdk::MemoryFormat::R8g8b8a8);
@@ -466,8 +458,10 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
             let f: Box<F> = Box::new(f);
             glib::signal::connect_raw(
                 self.as_ptr() as *mut glib::gobject_ffi::GObject,
-                b"key-event\0".as_ptr() as *const _,
-                Some(std::mem::transmute(connect_trampoline::<Self, F> as usize)),
+                c"key-event".as_ptr() as *const _,
+                Some(std::mem::transmute::<*const (), unsafe extern "C" fn()>(
+                    connect_trampoline::<Self, F> as *const (),
+                )),
                 Box::into_raw(f),
             )
         }
@@ -489,8 +483,10 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
             let f: Box<F> = Box::new(f);
             glib::signal::connect_raw(
                 self.as_ptr() as *mut glib::gobject_ffi::GObject,
-                b"motion\0".as_ptr() as *const _,
-                Some(std::mem::transmute(connect_trampoline::<Self, F> as usize)),
+                c"motion".as_ptr() as *const _,
+                Some(std::mem::transmute::<*const (), unsafe extern "C" fn()>(
+                    connect_trampoline::<Self, F> as *const (),
+                )),
                 Box::into_raw(f),
             )
         }
@@ -516,8 +512,10 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
             let f: Box<F> = Box::new(f);
             glib::signal::connect_raw(
                 self.as_ptr() as *mut glib::gobject_ffi::GObject,
-                b"motion-relative\0".as_ptr() as *const _,
-                Some(std::mem::transmute(connect_trampoline::<Self, F> as usize)),
+                c"motion-relative".as_ptr() as *const _,
+                Some(std::mem::transmute::<*const (), unsafe extern "C" fn()>(
+                    connect_trampoline::<Self, F> as *const (),
+                )),
                 Box::into_raw(f),
             )
         }
@@ -541,8 +539,10 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
             let f: Box<F> = Box::new(f);
             glib::signal::connect_raw(
                 self.as_ptr() as *mut glib::gobject_ffi::GObject,
-                b"mouse-press\0".as_ptr() as *const _,
-                Some(std::mem::transmute(connect_trampoline::<Self, F> as usize)),
+                c"mouse-press".as_ptr() as *const _,
+                Some(std::mem::transmute::<*const (), unsafe extern "C" fn()>(
+                    connect_trampoline::<Self, F> as *const (),
+                )),
                 Box::into_raw(f),
             )
         }
@@ -566,8 +566,10 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
             let f: Box<F> = Box::new(f);
             glib::signal::connect_raw(
                 self.as_ptr() as *mut glib::gobject_ffi::GObject,
-                b"mouse-release\0".as_ptr() as *const _,
-                Some(std::mem::transmute(connect_trampoline::<Self, F> as usize)),
+                c"mouse-release".as_ptr() as *const _,
+                Some(std::mem::transmute::<*const (), unsafe extern "C" fn()>(
+                    connect_trampoline::<Self, F> as *const (),
+                )),
                 Box::into_raw(f),
             )
         }
@@ -591,8 +593,10 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
             let f: Box<F> = Box::new(f);
             glib::signal::connect_raw(
                 self.as_ptr() as *mut glib::gobject_ffi::GObject,
-                b"scroll-discrete\0".as_ptr() as *const _,
-                Some(std::mem::transmute(connect_trampoline::<Self, F> as usize)),
+                c"scroll-discrete".as_ptr() as *const _,
+                Some(std::mem::transmute::<*const (), unsafe extern "C" fn()>(
+                    connect_trampoline::<Self, F> as *const (),
+                )),
                 Box::into_raw(f),
             )
         }
@@ -613,8 +617,8 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
             let f: Box<F> = Box::new(f);
             glib::signal::connect_raw(
                 self.as_ptr() as *mut _,
-                b"notify::read-only\0".as_ptr() as *const _,
-                Some(std::mem::transmute::<_, unsafe extern "C" fn()>(
+                c"notify::read-only".as_ptr() as *const _,
+                Some(std::mem::transmute::<*const (), unsafe extern "C" fn()>(
                     notify_trampoline::<Self, F> as *const (),
                 )),
                 Box::into_raw(f),
@@ -637,8 +641,8 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
             let f: Box<F> = Box::new(f);
             glib::signal::connect_raw(
                 self.as_ptr() as *mut _,
-                b"notify::grabbed\0".as_ptr() as *const _,
-                Some(std::mem::transmute::<_, unsafe extern "C" fn()>(
+                c"notify::grabbed".as_ptr() as *const _,
+                Some(std::mem::transmute::<*const (), unsafe extern "C" fn()>(
                     notify_trampoline::<Self, F> as *const (),
                 )),
                 Box::into_raw(f),
@@ -661,8 +665,8 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
             let f: Box<F> = Box::new(f);
             glib::signal::connect_raw(
                 self.as_ptr() as *mut _,
-                b"notify::remote-resize\0".as_ptr() as *const _,
-                Some(std::mem::transmute::<_, unsafe extern "C" fn()>(
+                c"notify::remote-resize".as_ptr() as *const _,
+                Some(std::mem::transmute::<*const (), unsafe extern "C" fn()>(
                     notify_trampoline::<Self, F> as *const (),
                 )),
                 Box::into_raw(f),
@@ -697,8 +701,10 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
             let f: Box<F> = Box::new(f);
             glib::signal::connect_raw(
                 self.as_ptr() as *mut glib::gobject_ffi::GObject,
-                b"resize-request\0".as_ptr() as *const _,
-                Some(std::mem::transmute(connect_trampoline::<Self, F> as usize)),
+                c"resize-request".as_ptr() as *const _,
+                Some(std::mem::transmute::<*const (), unsafe extern "C" fn()>(
+                    connect_trampoline::<Self, F> as *const (),
+                )),
                 Box::into_raw(f),
             )
         }
