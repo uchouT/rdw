@@ -37,15 +37,44 @@ impl RdpsndClientHandler for RdwSndBackend {
         static FORMATS: OnceLock<Vec<AudioFormat>> = OnceLock::new();
 
         FORMATS.get_or_init(|| {
-            let mut res = vec![AudioFormat {
-                format: WaveFormat::PCM,
-                n_channels: 2,
-                n_samples_per_sec: 44100,
-                n_avg_bytes_per_sec: 176400,
-                n_block_align: 4,
-                bits_per_sample: 16,
-                data: None,
-            }];
+            let mut res = vec![
+                AudioFormat {
+                    format: WaveFormat::PCM,
+                    n_channels: 2,
+                    n_samples_per_sec: 48000,
+                    n_avg_bytes_per_sec: 192000,
+                    n_block_align: 4,
+                    bits_per_sample: 16,
+                    data: None,
+                },
+                AudioFormat {
+                    format: WaveFormat::PCM,
+                    n_channels: 2,
+                    n_samples_per_sec: 44100,
+                    n_avg_bytes_per_sec: 176400,
+                    n_block_align: 4,
+                    bits_per_sample: 16,
+                    data: None,
+                },
+                AudioFormat {
+                    format: WaveFormat::PCM,
+                    n_channels: 2,
+                    n_samples_per_sec: 22050,
+                    n_avg_bytes_per_sec: 88200,
+                    n_block_align: 4,
+                    bits_per_sample: 16,
+                    data: None,
+                },
+                AudioFormat {
+                    format: WaveFormat::PCM,
+                    n_channels: 1,
+                    n_samples_per_sec: 22050,
+                    n_avg_bytes_per_sec: 44100,
+                    n_block_align: 2,
+                    bits_per_sample: 16,
+                    data: None,
+                },
+            ];
 
             if self.gst.can_decode("audio/x-opus").unwrap_or(false) {
                 res.push(AudioFormat {
