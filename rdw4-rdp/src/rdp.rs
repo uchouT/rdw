@@ -94,8 +94,7 @@ async fn tls_connect(
     let mut framed = ironrdp_tokio::TokioFramed::new(stream);
     let snd_backend = RdwSndBackend::new()?;
 
-    let mut connector = ClientConnector::new(config)
-        .with_server_addr(server_addr)
+    let mut connector = ClientConnector::new(config, server_addr)
         .with_static_channel(
             ironrdp::dvc::DrdynvcClient::new()
                 .with_dynamic_channel(DisplayControlClient::new(|_| Ok(Vec::new()))),

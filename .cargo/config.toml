@@ -2,7 +2,7 @@
 xtask = "run --package xtask --"
 
 [patch.crates-io]
-ironrdp = { git = "https://github.com/Devolutions/IronRDP.git" }
-ironrdp-tokio = { git = "https://github.com/Devolutions/IronRDP.git" }
+#ironrdp = { git = "https://github.com/Devolutions/IronRDP.git" }
+#ironrdp-tokio = { git = "https://github.com/Devolutions/IronRDP.git" }
 #ironrdp = { path = "../IronRDP/crates/ironrdp" }
 #ironrdp-tokio = { path = "../IronRDP/crates/ironrdp-tokio" }
