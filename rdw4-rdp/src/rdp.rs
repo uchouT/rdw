@@ -88,7 +88,7 @@ async fn tls_connect(
     config: Config,
     cb_backend: CbBackend,
 ) -> Result<(ConnectionResult, UpgradedFramed)> {
-    let stream = TcpStream::connect(format!("{}:{}", domain, port)).await?;
+    let stream = TcpStream::connect(format!("{domain}:{port}")).await?;
     let server_addr = stream.peer_addr()?;
 
     let mut framed = ironrdp_tokio::TokioFramed::new(stream);
@@ -302,7 +302,7 @@ fn cliprdr_handle_message(
         ClipboardMessage::SendFormatData(response) => cliprdr.submit_format_data(response)?,
         ClipboardMessage::SendInitiatePaste(format) => cliprdr.initiate_paste(format)?,
         ClipboardMessage::Error(e) => {
-            return Err(Error::Other(format!("Clipboard backend error: {}", e)));
+            return Err(Error::Other(format!("Clipboard backend error: {e}")));
         }
     };
     let frame = active_stage.process_svc_processor_messages(svc_messages)?;

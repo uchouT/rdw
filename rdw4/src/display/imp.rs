@@ -814,7 +814,7 @@ impl Display {
             #[upgrade_or_panic]
             move |toplevel| {
                 let inhibited = toplevel.is_shortcuts_inhibited();
-                log::debug!("shortcuts-inhibited: {}", inhibited);
+                log::debug!("shortcuts-inhibited: {inhibited}");
                 if !inhibited {
                     let id = this.shortcuts_inhibited_id.take();
                     toplevel.disconnect(id.unwrap());

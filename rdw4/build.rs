@@ -55,7 +55,7 @@ fn main() {
             .with_target_os_define("windows", "WIN32")
             .generate()
             .unwrap()
-            .write_to_file(out_include.join(format!("{}.h", name)));
+            .write_to_file(out_include.join(format!("{name}.h")));
     }
 
     if cfg!(feature = "bindings") {

@@ -12,9 +12,8 @@ struct GstAudioOut {
 impl GstAudioOut {
     fn new(caps: &str) -> Result<Self, Box<dyn Error>> {
         let pipeline = &format!(
-            "appsrc name=src is-live=1 do-timestamp=0 format=time caps=\"{}\" !\
-            queue ! decodebin ! audioconvert ! audioresample ! autoaudiosink name=sink",
-            caps
+            "appsrc name=src is-live=1 do-timestamp=0 format=time caps=\"{caps}\" !\
+            queue ! decodebin ! audioconvert ! audioresample ! autoaudiosink name=sink"
         );
         let pipeline = gst::parse::launch(pipeline)?;
         let pipeline = pipeline.dynamic_cast::<gst::Pipeline>().unwrap();
@@ -38,8 +37,7 @@ impl GstAudioIn {
     fn new(caps: &str) -> Result<Self, Box<dyn Error>> {
         let pipeline = &format!(
             "autoaudiosrc name=src ! queue ! audioconvert ! audioresample !\
-            appsink caps=\"{}\" name=sink",
-            caps
+            appsink caps=\"{caps}\" name=sink"
         );
         let pipeline = gst::parse::launch(pipeline)?;
         let pipeline = pipeline.dynamic_cast::<gst::Pipeline>().unwrap();
@@ -86,7 +84,7 @@ impl GstAudio {
 
     pub fn init_out(&mut self, id: u64, caps: &str) -> Result<(), Box<dyn Error>> {
         if self.out.contains_key(&id) {
-            return Err(format!("id {} is already setup", id).into());
+            return Err(format!("id {id} is already setup").into());
         }
 
         let out = GstAudioOut::new(caps)?;
@@ -101,7 +99,7 @@ impl GstAudio {
     fn get_out(&self, id: u64) -> Result<&GstAudioOut, String> {
         self.out
             .get(&id)
-            .ok_or_else(|| format!("Stream not found: {}", id))
+            .ok_or_else(|| format!("Stream not found: {id}"))
     }
 
     pub fn set_enabled_out(&mut self, id: u64, enabled: bool) -> Result<(), Box<dyn Error>> {
@@ -143,7 +141,7 @@ impl GstAudio {
 
     pub fn init_in(&mut self, id: u64, caps: &str) -> Result<(), Box<dyn Error>> {
         if self.in_.contains_key(&id) {
-            return Err(format!("id {} is already setup", id).into());
+            return Err(format!("id {id} is already setup").into());
         }
 
         let in_ = GstAudioIn::new(caps)?;
@@ -158,7 +156,7 @@ impl GstAudio {
     fn get_in(&self, id: u64) -> Result<&GstAudioIn, String> {
         self.in_
             .get(&id)
-            .ok_or_else(|| format!("Stream not found: {}", id))
+            .ok_or_else(|| format!("Stream not found: {id}"))
     }
 
     pub fn set_enabled_in(&mut self, id: u64, enabled: bool) -> Result<(), Box<dyn Error>> {
@@ -197,7 +195,7 @@ impl GstAudio {
         let in_ = self
             .in_
             .get_mut(&id)
-            .ok_or_else(|| format!("Stream not found: {}", id))?;
+            .ok_or_else(|| format!("Stream not found: {id}"))?;
         let mut stream = in_.sink.stream();
         while in_.queue.len() < size as usize {
             let sample = stream.next().await.ok_or_else(|| "EOS?".to_string())?;

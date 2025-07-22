@@ -115,7 +115,7 @@ pub(crate) mod imp {
                     }
                     let button_mask = this.last_button_mask();
                     if let Err(e) = this.connection.pointer_event(button_mask, x as _, y as _) {
-                        log::warn!("Failed to send pointer event: {}", e);
+                        log::warn!("Failed to send pointer event: {e}");
                     }
                 }
             ));
@@ -131,7 +131,7 @@ pub(crate) mod imp {
                     let button_mask = this.last_button_mask();
                     let (dx, dy) = (dx as i32 + 0x7fff, dy as i32 + 0x7fff);
                     if let Err(e) = this.connection.pointer_event(button_mask, dx as _, dy as _) {
-                        log::warn!("Failed to send pointer event: {}", e);
+                        log::warn!("Failed to send pointer event: {e}");
                     }
                 }
             ));
@@ -140,7 +140,7 @@ pub(crate) mod imp {
                 #[weak(rename_to = this)]
                 self,
                 move |_, button| {
-                    log::debug!("mouse-press: {:?}", button);
+                    log::debug!("mouse-press: {button:?}");
                     this.mouse_click(true, button);
                 }
             ));
@@ -149,7 +149,7 @@ pub(crate) mod imp {
                 #[weak(rename_to = this)]
                 self,
                 move |_, button| {
-                    log::debug!("mouse-release: {:?}", button);
+                    log::debug!("mouse-release: {button:?}");
                     this.mouse_click(false, button);
                 }
             ));
@@ -158,7 +158,7 @@ pub(crate) mod imp {
                 #[weak(rename_to = this)]
                 self,
                 move |_, scroll| {
-                    log::debug!("scroll-discrete: {:?}", scroll);
+                    log::debug!("scroll-discrete: {scroll:?}");
                     this.scroll(scroll);
                 }
             ));
@@ -182,7 +182,7 @@ pub(crate) mod imp {
 
             self.connection.connect_vnc_auth_choose_type(|conn, va| {
                 use gvnc::ConnectionAuth::*;
-                log::debug!("auth-choose-type: {:?}", va);
+                log::debug!("auth-choose-type: {va:?}");
 
                 let prefer_auth = [
                     // Both these two provide TLS based auth, and can layer
@@ -196,7 +196,7 @@ pub(crate) mod imp {
                         if a.get::<gvnc::ConnectionAuth>().unwrap() == auth {
                             if let Err(e) = conn.set_auth_type(auth.into_glib().try_into().unwrap())
                             {
-                                log::warn!("Failed to set auth type: {}", e);
+                                log::warn!("Failed to set auth type: {e}");
                                 conn.shutdown();
                             }
                             return;
@@ -225,7 +225,7 @@ pub(crate) mod imp {
                                         if let Err(e) = conn
                                             .set_auth_subtype(auth.into_glib().try_into().unwrap())
                                         {
-                                            log::warn!("Failed to set auth subtype: {}", e);
+                                            log::warn!("Failed to set auth subtype: {e}");
                                             conn.shutdown();
                                         }
                                         return;
@@ -248,7 +248,7 @@ pub(crate) mod imp {
                 self,
                 move |conn| {
                     if let Err(e) = this.on_initialized() {
-                        log::warn!("Failed to initialize: {}", e);
+                        log::warn!("Failed to initialize: {e}");
                         conn.shutdown();
                     }
                 }
@@ -278,17 +278,17 @@ pub(crate) mod imp {
                 #[weak(rename_to = this)]
                 self,
                 move |_, abs| {
-                    log::debug!("pointer-mode-changed: {}", abs);
+                    log::debug!("pointer-mode-changed: {abs}");
                     this.obj().set_mouse_absolute(abs);
                 }
             ));
 
             self.connection.connect_vnc_server_cut_text(|_, text| {
-                log::debug!("server-cut-text: {}", text);
+                log::debug!("server-cut-text: {text}");
             });
 
             self.connection.connect_vnc_desktop_resize(|_, object, p0| {
-                log::debug!("desktop-resize: {}, {}", object, p0);
+                log::debug!("desktop-resize: {object}, {p0}");
             });
 
             self.connection.connect_vnc_framebuffer_update(clone!(
@@ -308,7 +308,7 @@ pub(crate) mod imp {
                         );
                     }
                     if let Err(e) = this.framebuffer_update_request(true) {
-                        log::warn!("Failed to update framebuffer: {}", e);
+                        log::warn!("Failed to update framebuffer: {e}");
                     }
                 }
             ));
@@ -321,29 +321,29 @@ pub(crate) mod imp {
                     this.do_framebuffer_init();
                     this.obj().set_display_size(Some((w as _, h as _)));
                     if let Err(e) = this.framebuffer_update_request(false) {
-                        log::warn!("Failed to update framebuffer: {}", e);
+                        log::warn!("Failed to update framebuffer: {e}");
                     }
                 }
             ));
 
             self.connection.connect_vnc_desktop_rename(|_, name| {
-                log::debug!("desktop-rename: {}", name);
+                log::debug!("desktop-rename: {name}");
             });
 
             self.connection.connect_vnc_pixel_format_changed(clone!(
                 #[weak(rename_to = this)]
                 self,
                 move |_, format| {
-                    log::debug!("pixel-format-changed: {:?}", format);
+                    log::debug!("pixel-format-changed: {format:?}");
                     this.do_framebuffer_init();
                     if let Err(e) = this.framebuffer_update_request(false) {
-                        log::warn!("Failed to update framebuffer: {}", e);
+                        log::warn!("Failed to update framebuffer: {e}");
                     }
                 }
             ));
 
             self.connection.connect_vnc_auth_credential(|_, va| {
-                log::debug!("auth-credential: {:?}", va);
+                log::debug!("auth-credential: {va:?}");
             });
 
             // TODO: gvnc doesn't support EXT_CLIPBOARD 0xc0a1e5ce
@@ -354,7 +354,7 @@ pub(crate) mod imp {
                     if this.obj().read_only() {
                         return;
                     }
-                    log::debug!("server-cut-text, {}", text);
+                    log::debug!("server-cut-text, {text}");
                     this.obj().clipboard().set_text(text);
                 }
             ));
@@ -406,7 +406,7 @@ pub(crate) mod imp {
             // TODO: get the correct keymap according to gdk display type
             if let Some(qnum) = self.keymap.get().and_then(|m| m.get(keycode as usize)) {
                 if let Err(e) = self.connection.key_event(press, keyval, *qnum) {
-                    log::warn!("Failed to send key event: {}", e);
+                    log::warn!("Failed to send key event: {e}");
                 }
             }
         }
@@ -431,13 +431,13 @@ pub(crate) mod imp {
             self.last_button_mask.set(Some(button_mask));
 
             if let Err(e) = self.connection.pointer_event(button_mask, x, y) {
-                log::warn!("Failed to send key event: {}", e);
+                log::warn!("Failed to send key event: {e}");
             }
         }
 
         fn mouse_click(&self, press: bool, button: u32) {
             if button > 3 {
-                log::warn!("Unhandled button event nth: {}", button);
+                log::warn!("Unhandled button event nth: {button}");
                 return;
             }
             self.button_event(press, button as _)
@@ -503,7 +503,7 @@ pub(crate) mod imp {
             ];
 
             let mut format = self.connection.pixel_format().unwrap();
-            log::debug!("format: {:?}", format);
+            log::debug!("format: {format:?}");
             format.set_byte_order(gvnc::ByteOrder::Little);
             self.connection.set_pixel_format(&format)?;
 
@@ -534,7 +534,7 @@ pub(crate) mod imp {
             self.framebuffer_update_request(false)?;
 
             let abs = self.connection.is_abs_pointer();
-            log::debug!("is_abs_pointer: {:?}", abs);
+            log::debug!("is_abs_pointer: {abs:?}");
             self.obj().set_mouse_absolute(abs);
             // hidden until we receive a cursor change
             self.obj()

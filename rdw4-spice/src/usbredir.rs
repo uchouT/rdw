@@ -70,7 +70,7 @@ impl UsbRedir {
         ));
 
         let free_channels = manager.free_channels();
-        log::debug!("free_channels: {}", free_channels);
+        log::debug!("free_channels: {free_channels}");
         manager
             .bind_property("free-channels", &redir, "free-channels")
             .sync_create()
@@ -85,11 +85,11 @@ impl UsbRedir {
 
 fn same_device(spice: &spice::UsbDevice, rdw: &rdw::UsbDevice) -> bool {
     let spice_device = match spice.libusb_device() {
-        Some(d) => format!("{:?}", d),
+        Some(d) => format!("{d:?}"),
         _ => return false,
     };
     let rdw_device = match rdw.device() {
-        Some(d) => format!("{:?}", d),
+        Some(d) => format!("{d:?}"),
         _ => return false,
     };
 

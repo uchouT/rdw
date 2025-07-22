@@ -224,7 +224,7 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
         // Safety: safe because IsA<Display>
         let self_: &Display = unsafe { self.unsafe_cast_ref::<Display>() };
 
-        log::trace!("set_display_size: {:?}", size);
+        log::trace!("set_display_size: {size:?}");
         #[cfg(feature = "bindings")]
         unsafe {
             let (w, h) = size.unwrap_or_default();
@@ -240,7 +240,7 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
 
             let (width, height) = size.unwrap_or((0, 0));
             if let Err(e) = imp.picture.paintable().set_size(width, height) {
-                log::warn!("Failed to set size: {}", e);
+                log::warn!("Failed to set size: {e}");
             }
 
             self.queue_resize();
@@ -323,7 +323,7 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
                 .paintable()
                 .update_area(x, y, w, h, stride, data)
             {
-                log::warn!("Failed to update area: {}", e);
+                log::warn!("Failed to update area: {e}");
             }
         }
     }
@@ -381,7 +381,7 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
             let imp = self_.imp();
 
             if let Err(e) = imp.picture.paintable().import_dmabuf(&s) {
-                log::warn!("Failed to import DMABUF: {}", e);
+                log::warn!("Failed to import DMABUF: {e}");
             }
         }
     }

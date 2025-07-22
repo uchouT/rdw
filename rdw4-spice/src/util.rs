@@ -17,7 +17,7 @@ pub(crate) fn format_from_mime(mime: &str) -> Option<spice::ClipboardFormat> {
         "text/plain" => Some(spice::ClipboardFormat::Utf8),
         "text/plain;charset=utf-8" => Some(spice::ClipboardFormat::Utf8),
         _ => {
-            log::debug!("Unhandled mime type: {}", mime);
+            log::debug!("Unhandled mime type: {mime}");
             None
         }
     }

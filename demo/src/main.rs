@@ -131,7 +131,7 @@ fn vnc_display(app: &adw::Application, uri: glib::Uri) -> rdw::Display {
     let host = uri.host().unwrap_or_else(|| "localhost".into());
     let vnc = rdw_vnc::Display::new();
     vnc.connection()
-        .open_host(&host, &format!("{}", port))
+        .open_host(&host, &format!("{port}"))
         .unwrap();
 
     let has_error2 = has_error.clone();
@@ -237,7 +237,7 @@ fn spice_display(app: &adw::Application, uri: glib::Uri) -> rdw::Display {
 
 fn make_display(app: &adw::Application, mut uri: String) -> rdw::Display {
     if glib::Uri::peek_scheme(&uri).is_none() {
-        uri = format!("vnc://{}", uri);
+        uri = format!("vnc://{uri}");
     }
 
     let uri = glib::Uri::parse(&uri, glib::UriFlags::NONE).unwrap();
@@ -246,7 +246,7 @@ fn make_display(app: &adw::Application, mut uri: String) -> rdw::Display {
         "vnc" => vnc_display(app, uri),
         "rdp" => rdp_display(app, uri),
         spice if spice.starts_with("spice") => spice_display(app, uri),
-        scheme => panic!("Unhandled scheme {}", scheme),
+        scheme => panic!("Unhandled scheme {scheme}"),
     }
 }
 
@@ -337,7 +337,7 @@ fn main() {
                 let usbredir = match rdw_spice::UsbRedir::build(&spice.session()) {
                     Ok(it) => it,
                     Err(e) => {
-                        panic!("Failed to open USB dialog: {}", e);
+                        panic!("Failed to open USB dialog: {e}");
                     }
                 };
                 let dialog = gtk::Window::new();

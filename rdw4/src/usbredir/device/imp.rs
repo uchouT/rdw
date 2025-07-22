@@ -51,7 +51,7 @@ impl ObjectImpl for Device {
 impl Device {
     pub fn set_device(&self, device: rusb::Device<rusb::Context>) {
         if let Ok((manufacturer, product)) = device_manufacturer_product(&device) {
-            self.obj().set_name(format!("{} {}", manufacturer, product));
+            self.obj().set_name(format!("{manufacturer} {product}"));
         } else {
             self.obj().set_name(format!(
                 "Bus {:03} Device {:03}",
@@ -71,7 +71,7 @@ impl Device {
 fn read_char_attribute(major: u32, minor: u32, attribute: &str) -> std::io::Result<String> {
     use std::io::prelude::*;
 
-    let mut file = std::fs::File::open(format!("/sys/dev/char/{}:{}/{}", major, minor, attribute))?;
+    let mut file = std::fs::File::open(format!("/sys/dev/char/{major}:{minor}/{attribute}"))?;
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
     loop {
@@ -91,7 +91,7 @@ fn device_manufacturer_product(
     use std::{fs::*, os::unix::fs::MetadataExt};
 
     let (bus, addr) = (device.bus_number(), device.address());
-    let metadata = metadata(format!("/dev/bus/usb/{:03}/{:03}", bus, addr))?;
+    let metadata = metadata(format!("/dev/bus/usb/{bus:03}/{addr:03}"))?;
     let rdev = metadata.rdev();
     let (major, minor) = (libc::major(rdev), libc::minor(rdev));
     let manufacturer = read_char_attribute(major, minor, "manufacturer");
@@ -102,8 +102,7 @@ fn device_manufacturer_product(
             product.unwrap_or_else(|_| "N/A".into()),
         ))
     } else {
-        Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        Err(std::io::Error::other(
             "Unknown device",
         ))
     }

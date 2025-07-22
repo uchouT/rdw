@@ -45,7 +45,7 @@ impl RdwUsbContext {
         let ctxt = match rusb::Context::new() {
             Ok(ctxt) => ctxt,
             Err(e) => {
-                log::warn!("Failed to create USB context: {}", e);
+                log::warn!("Failed to create USB context: {e}");
                 return None;
             }
         };
@@ -57,7 +57,7 @@ impl RdwUsbContext {
         {
             Ok(reg) => reg,
             Err(e) => {
-                log::warn!("Failed to register USB callback: {}", e);
+                log::warn!("Failed to register USB callback: {e}");
                 return None;
             }
         };
@@ -66,7 +66,7 @@ impl RdwUsbContext {
         thread::spawn(move || loop {
             // note: there is a busy loop with libusb <= 1.0.24!..
             if let Err(e) = ctx.handle_events(None) {
-                log::warn!("USB context failed to loop: {}", e);
+                log::warn!("USB context failed to loop: {e}");
                 break;
             }
         });
@@ -266,7 +266,7 @@ impl WidgetImpl for UsbRedir {
 impl UsbRedir {
     fn set_free_channels(&self, n: i32) {
         self.free_channels.set(n);
-        self.free_label.set_label(&format!("({} free channels)", n));
+        self.free_label.set_label(&format!("({n} free channels)"));
         self.free_label.set_visible(n >= 0);
     }
 
@@ -289,7 +289,7 @@ impl UsbRedir {
         match is_hub(&d) {
             Ok(true) => return,
             Err(e) => {
-                log::warn!("Failed to get device details: {}", e);
+                log::warn!("Failed to get device details: {e}");
                 return;
             }
             _ => (),

@@ -47,11 +47,11 @@ fn main() {
             .with_config(config)
             .with_gobject(true)
             .with_include_version(true)
-            .with_include_guard(format!("{}_H", name_up))
+            .with_include_guard(format!("{name_up}_H"))
             .with_sys_include("rdw.h")
             .generate()
             .unwrap()
-            .write_to_file(out_include.join(format!("{}.h", name)));
+            .write_to_file(out_include.join(format!("{name}.h")));
     }
 
     if cfg!(feature = "bindings") {

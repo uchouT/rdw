@@ -137,7 +137,7 @@ mod imp {
                 #[weak(rename_to = this)]
                 self,
                 move |_, button| {
-                    log::debug!("mouse-press: {:?}", button);
+                    log::debug!("mouse-press: {button:?}");
                     this.mouse_click(true, button);
                 }
             ));
@@ -146,7 +146,7 @@ mod imp {
                 #[weak(rename_to = this)]
                 self,
                 move |_, button| {
-                    log::debug!("mouse-release: {:?}", button);
+                    log::debug!("mouse-release: {button:?}");
                     this.mouse_click(false, button);
                 }
             ));
@@ -155,7 +155,7 @@ mod imp {
                 #[weak(rename_to = this)]
                 self,
                 move |_, scroll| {
-                    log::debug!("scroll-discrete: {:?}", scroll);
+                    log::debug!("scroll-discrete: {scroll:?}");
                     this.scroll(scroll);
                 }
             ));
@@ -204,7 +204,7 @@ mod imp {
 
                         main.connect_main_mouse_update(clone!(#[weak] this, move |main| {
                             let mode = spice::MouseMode::from_bits_truncate(main.mouse_mode());
-                            log::debug!("mouse-update: {:?}", mode);
+                            log::debug!("mouse-update: {mode:?}");
                             this.obj().set_mouse_absolute(mode.contains(spice::MouseMode::CLIENT));
                         }));
 
@@ -216,7 +216,7 @@ mod imp {
                                     return;
                                 }
                                 if let Err(e) = tx.try_send(glib::Bytes::from(data)) {
-                                    log::warn!("Failed to send clipboard data to future: {}", e);
+                                    log::warn!("Failed to send clipboard data to future: {e}");
                                 }
                             }
                         }));
@@ -255,16 +255,16 @@ mod imp {
                                     })))
                                 }));
                                 if let Err(e) = clipboard.set_content(Some(&content)) {
-                                    log::warn!("Failed to set clipboard grab: {}", e);
+                                    log::warn!("Failed to set clipboard grab: {e}");
                                 }
                             }
                         }));
 
                         main.connect_main_clipboard_selection_release(clone!(#[weak] this, move |_main, selection| {
-                            log::debug!("clipboard-release: {:?}", selection);
+                            log::debug!("clipboard-release: {selection:?}");
                             if let Some(clipboard) = this.clipboard_from_selection(selection) {
                                 if let Err(e) = clipboard.set_content(gdk::ContentProvider::NONE) {
-                                    log::warn!("Failed to release clipboard: {}", e);
+                                    log::warn!("Failed to release clipboard: {e}");
                                 }
                             }
                         }));
@@ -289,11 +289,11 @@ mod imp {
                                                 Ok(size) => {
                                                     let data = out.steal_as_bytes();
                                                     main.clipboard_selection_notify(selection, format as u32, data.as_ref());
-                                                    log::debug!("clipboard-sent: {}", size);
+                                                    log::debug!("clipboard-sent: {size}");
                                                     return;
                                                 }
                                                 Err(e) => {
-                                                    log::warn!("Failed to read clipboard: {}", e);
+                                                    log::warn!("Failed to read clipboard: {e}");
                                                 }
                                             }
                                         }
@@ -310,7 +310,7 @@ mod imp {
 
                         input.connect_inputs_modifiers(clone!(move |input| {
                             let modifiers = input.key_modifiers();
-                            log::debug!("inputs-modifiers: {}", modifiers);
+                            log::debug!("inputs-modifiers: {modifiers}");
                             input.connect_channel_event(clone!(move |input, event| {
                                 if event == spice::ChannelEvent::Opened && input.socket().unwrap().family() == gio::SocketFamily::Unix {
                                     log::debug!("on unix socket");
@@ -332,7 +332,7 @@ mod imp {
                         });
 
                         dpy.connect_display_mark(clone!(#[weak] this, move |_, mark| {
-                            log::debug!("primary-mark: {}", mark);
+                            log::debug!("primary-mark: {mark}");
                             this.invalidate_monitor();
                         }));
 
@@ -343,7 +343,7 @@ mod imp {
 
                         dpy.connect_gl_scanout_notify(clone!(#[weak] this, move |dpy| {
                             let scanout = dpy.gl_scanout();
-                            log::debug!("notify::gl-scanout: {:?}", scanout);
+                            log::debug!("notify::gl-scanout: {scanout:?}");
 
                             #[cfg(unix)]
                             if let Some(scanout) = scanout {
@@ -367,7 +367,7 @@ mod imp {
 
                         dpy.connect_monitors_notify(clone!(#[weak] this, move |dpy| {
                             let monitors = dpy.monitors();
-                            log::debug!("notify::monitors: {:?}", monitors);
+                            log::debug!("notify::monitors: {monitors:?}");
 
                             let monitor_config = monitors.and_then(|m| m.get(this.nth_monitor).copied());
                             if let Some((0, 0, w, h)) = monitor_config.map(|c| c.geometry()) {
@@ -399,7 +399,7 @@ mod imp {
 
                         cursor.connect_cursor_notify(clone!(#[weak] this, move |cursor| {
                             let cursor = cursor.cursor();
-                            log::debug!("cursor-notify: {:?}", cursor);
+                            log::debug!("cursor-notify: {cursor:?}");
                             if let Some(cursor) = cursor {
                                 match cursor.cursor_type() {
                                     Ok(spice::CursorType::Alpha) => {
@@ -413,7 +413,7 @@ mod imp {
                                         );
                                         this.obj().define_cursor(Some(cursor));
                                     }
-                                    e => log::warn!("Unhandled cursor type: {:?}", e),
+                                    e => log::warn!("Unhandled cursor type: {e:?}"),
                                 }
                             }
                         }));
@@ -469,7 +469,7 @@ mod imp {
                         types.sort_unstable();
                         types.dedup();
                         if !types.is_empty() {
-                            log::debug!(">clipboard-grab({}): {:?}", selection, types);
+                            log::debug!(">clipboard-grab({selection}): {types:?}");
                             main.clipboard_selection_grab(selection, &types);
                         }
                     }
@@ -492,7 +492,7 @@ mod imp {
                     &obj.upcast_ref::<gtk::Widget>().display(),
                 )),
                 _ => {
-                    log::warn!("Unsupport clipboard selection: {}", selection);
+                    log::warn!("Unsupport clipboard selection: {selection}");
                     None
                 }
             }
@@ -526,7 +526,7 @@ mod imp {
                 gdk::BUTTON_MIDDLE => spice::MouseButton::Middle,
                 gdk::BUTTON_SECONDARY => spice::MouseButton::Right,
                 button => {
-                    log::warn!("Unhandled button event nth: {}", button);
+                    log::warn!("Unhandled button event nth: {button}");
                     return;
                 }
             };
@@ -539,7 +539,7 @@ mod imp {
                 rdw::Scroll::Up => spice::MouseButton::Up,
                 rdw::Scroll::Down => spice::MouseButton::Down,
                 other => {
-                    log::debug!("spice doesn't have scroll: {:?}", other);
+                    log::debug!("spice doesn't have scroll: {other:?}");
                     return;
                 }
             };
@@ -606,7 +606,7 @@ mod imp {
                     );
                 }
                 _ => {
-                    log::debug!("format not supported: {:?}", fmt);
+                    log::debug!("format not supported: {fmt:?}");
                 }
             }
         }

@@ -304,7 +304,7 @@ impl Paintable {
                 attribs,
             )
             .map_err(|e| {
-                glib::Error::new(crate::Error::GL, &format!("eglCreateImage() failed: {}", e))
+                glib::Error::new(crate::Error::GL, &format!("eglCreateImage() failed: {e}"))
             })?;
 
         gl::BindTexture(gl::TEXTURE_2D, self.texture_id()?);
@@ -313,7 +313,7 @@ impl Paintable {
         egl.destroy_image(egl_dpy, img).map_err(|e| {
             glib::Error::new(
                 crate::Error::GL,
-                &format!("eglDestroyImage() failed: {}", e),
+                &format!("eglDestroyImage() failed: {e}"),
             )
         })?;
 
