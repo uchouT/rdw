@@ -10,7 +10,7 @@ bindings = ["rdw/bindings"]
 capi = []
 
 [build-dependencies]
-cargo_metadata = "0.19"
+cargo_metadata.workspace = true
 cbindgen = { path = "../cbindgen", features = ["gobject"] }
 system-deps = "7.0"
 
@@ -35,7 +35,7 @@ thiserror = "2.0.12"
 tokio = { version = "1.44.1", features = ["net", "rt", "macros"] }
 derivative = "2.2.0"
 rdw = { package = "rdw4", path = "../rdw4", default-features = false }
-nix = { version = "0.29", features = ["fs", "event"] }
+nix = { version = "0.30", features = ["fs", "event"] }
 futures-executor = "0.3"
 futures-util = "0.3"
 futures-channel = "0.3"

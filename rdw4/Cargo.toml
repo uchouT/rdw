@@ -12,7 +12,7 @@ x11 = ["dep:gdk-x11", "dep:x11"]
 capi = ["env_logger"]
 
 [build-dependencies]
-cargo_metadata = "0.19"
+cargo_metadata.workspace = true
 cbindgen = { path = "../cbindgen", features = ["gobject"] }
 system-deps = "7.0"
 

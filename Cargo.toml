@@ -15,3 +15,4 @@ resolver = "2"
 default-members = ["demo"]
 
 [workspace.dependencies]
+cargo_metadata = "0.21"
