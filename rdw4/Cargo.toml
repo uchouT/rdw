@@ -45,15 +45,15 @@ version = "0.9"
 
 [dependencies.gst]
 package = "gstreamer"
-version = "0.23"
+version = "0.24"
 
 [dependencies.gst-app]
 package = "gstreamer-app"
-version = "0.23"
+version = "0.24"
 
 [dependencies.gst-audio]
 package = "gstreamer-audio"
-version = "0.23"
+version = "0.24"
 
 [target.'cfg(unix)'.dependencies]
 
