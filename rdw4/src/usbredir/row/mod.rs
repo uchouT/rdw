@@ -4,7 +4,9 @@ use super::Device;
 use gtk::{glib, subclass::prelude::*};
 
 glib::wrapper! {
-    pub struct Row(ObjectSubclass<imp::Row>) @extends gtk::Widget;
+    pub struct Row(ObjectSubclass<imp::Row>)
+        @extends gtk::Widget,
+        @implements gtk::ConstraintTarget, gtk::Buildable, gtk::Accessible;
 }
 
 impl Row {

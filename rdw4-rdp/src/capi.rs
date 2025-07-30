@@ -1,5 +1,7 @@
-use std::ffi::CStr;
-use std::os::raw::{c_char, c_void};
+use std::{
+    ffi::CStr,
+    os::raw::{c_char, c_void},
+};
 
 use rdw::gtk::{
     gio,

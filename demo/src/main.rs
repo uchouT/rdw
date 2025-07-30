@@ -288,13 +288,13 @@ fn main() {
     app.connect_handle_local_options(|_, opt| {
         if opt.lookup_value("version", None).is_some() {
             println!("Version: {}", env!("CARGO_PKG_VERSION"));
-            return 0;
+            return std::ops::ControlFlow::Break(glib::ExitCode::new(0));
         }
         if opt.lookup_value("debug", None).is_some() {
             gvnc::set_debug(true);
             spice::set_debug(true);
         }
-        -1
+        std::ops::ControlFlow::Continue(())
     });
 
     let display = Rc::new(RefCell::new(None));
@@ -309,7 +309,7 @@ fn main() {
         let display = make_display(app, uri);
         dpy.replace(Some(display));
         app.activate();
-        -1
+        glib::ExitCode::new(0)
     });
 
     let action_quit = gio::SimpleAction::new("quit", None);

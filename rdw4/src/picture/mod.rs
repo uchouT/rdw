@@ -7,7 +7,7 @@ mod imp;
 glib::wrapper! {
     pub struct Picture(ObjectSubclass<imp::Picture>)
         @extends gtk::Widget,
-        @implements gtk::Accessible;
+        @implements gtk::ConstraintTarget, gtk::Buildable, gtk::Accessible;
 }
 
 impl Default for Picture {

@@ -39,9 +39,8 @@ wayland-protocols = { version = "0.32", features = [
 x11 = { version = "2.21", optional = true }
 
 [dependencies.gtk]
-package = "gtk4"
+workspace = true
 features = ["unsafe-assume-initialized", "v4_12"]
-version = "0.9"
 
 [dependencies.gst]
 package = "gstreamer"
@@ -61,16 +60,16 @@ version = "0.24"
 package = "gdk4-wayland"
 features = ["v4_4", "egl", "wayland_crate"]
 optional = true
-version = "0.9"
+version = "0.10"
 
 [dependencies.gdk-x11]
 package = "gdk4-x11"
 features = ["v4_4", "egl"]
 optional = true
-version = "0.9"
+version = "0.10"
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.56.0", features = [
+windows = { version = "0.61.0", features = [
     "Win32_Devices_HumanInterfaceDevice",
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
@@ -87,7 +86,7 @@ windows = { version = "0.56.0", features = [
 [target.'cfg(windows)'.dependencies.gdk-win32]
 package = "gdk4-win32"
 features = ["v4_4", "win32", "egl"]
-version = "0.9"
+version = "0.10"
 
 [package.metadata.capi.header]
 name = "rdw"

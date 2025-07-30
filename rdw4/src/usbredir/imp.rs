@@ -183,7 +183,7 @@ impl ObjectImpl for UsbRedir {
                         .param_types([String::static_type()])
                         // TODO: <glib::signal::Inhibit>::static_type().into(),
                         .return_type_from(bool::static_type())
-                        .class_handler(|_token, args| {
+                        .class_handler(|args| {
                             let inst = args[0].get::<super::UsbRedir>().unwrap();
                             let imp = inst.imp();
                             let msg: String = args[1].get().unwrap();
@@ -191,11 +191,12 @@ impl ObjectImpl for UsbRedir {
                             imp.infobar_revealer.set_reveal_child(true);
                             Some(true.to_value())
                         })
-                        .accumulator(|_hint, ret, value| {
-                            let handled: bool = value.get().unwrap_or_default();
-                            *ret = value.clone();
-                            !handled
-                        })
+                        // XXX: I don't remember what this was for
+                        // .accumulator(|_hint, ret, value| {
+                        //     let handled: bool = value.get().unwrap_or_default();
+                        //     *ret = value.clone();
+                        //     !handled
+                        // })
                         .build(),
                 ]
             })

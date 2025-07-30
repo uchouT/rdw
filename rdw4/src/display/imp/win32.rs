@@ -57,7 +57,9 @@ impl Helper {
                 let mut pcbsize = std::mem::size_of_val(&input) as u32;
                 unsafe {
                     let res = GetRawInputData(
-                        HRAWINPUT(msg.lParam.0),
+                        // ugly hack to cast isize to HRAWINPUT, something is wrong..
+                        // https://learn.microsoft.com/en-us/windows/win32/inputdev/wm-input
+                        HRAWINPUT(msg.lParam.0 as usize as _),
                         RID_INPUT,
                         Some(&mut input as *mut _ as *mut _),
                         &mut pcbsize as *mut _,

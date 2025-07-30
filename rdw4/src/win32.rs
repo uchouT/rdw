@@ -2,7 +2,7 @@ use gtk::prelude::*;
 use windows::{
     core::Result,
     Win32::{
-        Foundation::{LPARAM, LRESULT, WPARAM},
+        Foundation::{HINSTANCE, LPARAM, LRESULT, WPARAM},
         UI::WindowsAndMessaging::{
             SetWindowsHookExA, SystemParametersInfoA, UnhookWindowsHookEx, HHOOK, SPI_GETMOUSE,
             SPI_GETMOUSESPEED, SPI_SETMOUSE, SPI_SETMOUSESPEED,
@@ -116,7 +116,10 @@ pub(crate) fn hook_keyboard() -> Result<HHOOK> {
         CallNextHookEx(None, code, wparam, lparam)
     }
 
-    unsafe { SetWindowsHookExA(WH_KEYBOARD_LL, Some(hook), GetModuleHandleA(None)?, 0) }
+    // XXX: we have always done that, like SDL or other UI code around
+    // but apparently this isn't correct
+    let hinstance = unsafe { HINSTANCE(GetModuleHandleA(None)?.0) };
+    unsafe { SetWindowsHookExA(WH_KEYBOARD_LL, Some(hook), Some(hinstance), 0) }
 }
 
 pub(crate) fn unhook(hook: HHOOK) -> Result<()> {
@@ -140,5 +143,8 @@ pub(crate) fn hook_mouse() -> Result<HHOOK> {
         CallNextHookEx(None, code, wparam, lparam)
     }
 
-    unsafe { SetWindowsHookExA(WH_MOUSE_LL, Some(hook), GetModuleHandleA(None)?, 0) }
+    // XXX: we have always done that, like SDL or other UI code around
+    // but apparently this isn't correct
+    let hinstance = unsafe { HINSTANCE(GetModuleHandleA(None)?.0) };
+    unsafe { SetWindowsHookExA(WH_MOUSE_LL, Some(hook), Some(hinstance), 0) }
 }

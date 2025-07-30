@@ -1,18 +1,21 @@
 use std::sync::{Arc, Mutex};
 
-use ironrdp::cliprdr::backend::{ClipboardMessage, ClipboardMessageProxy, CliprdrBackend};
-use ironrdp::cliprdr::pdu::{
-    ClipboardFormat, ClipboardFormatId, ClipboardFormatName, ClipboardGeneralCapabilityFlags,
-    FileContentsRequest, FileContentsResponse, FormatDataRequest, FormatDataResponse, LockDataId,
+use ironrdp::{
+    cliprdr::{
+        backend::{ClipboardMessage, ClipboardMessageProxy, CliprdrBackend},
+        pdu::{
+            ClipboardFormat, ClipboardFormatId, ClipboardFormatName,
+            ClipboardGeneralCapabilityFlags, FileContentsRequest, FileContentsResponse,
+            FormatDataRequest, FormatDataResponse, LockDataId,
+        },
+    },
+    core::impl_as_any,
 };
-use ironrdp::core::impl_as_any;
 use rdw::gtk::gdk;
-use tokio::sync::mpsc;
-use tokio::sync::oneshot::Sender;
+use tokio::sync::{mpsc, oneshot::Sender};
 use tracing::{debug, error, trace, warn};
 
-use crate::rdp::RdpOutputEvent;
-use crate::util::string_from_utf16;
+use crate::{rdp::RdpOutputEvent, util::string_from_utf16};
 
 #[derive(Clone, Debug)]
 pub(crate) struct ClientClipboardMessageProxy {
