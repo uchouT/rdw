@@ -36,7 +36,9 @@ $(GIR): $(HEADER)
 		--namespace Rdw --nsversion=4.0 \
 		--identifier-prefix Rdw \
 		--c-include "rdw.h" \
+		-I$(PREFIX)/include \
 		-Iinst/$(PREFIX)/include \
+		-L$(PREFIX)/$(LIB) \
 		-Linst/$(PREFIX)/$(LIB) \
 		--include=Gtk-4.0 --pkg gtk4 \
 		--library=rdw4 \
