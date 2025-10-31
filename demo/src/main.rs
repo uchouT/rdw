@@ -98,6 +98,11 @@ fn rdp_display(app: &adw::Application, uri: glib::Uri) -> rdw::Display {
         ),
     );
 
+    rdp.connect_verify_tls_certificate(move |_display, _subject, _issuer, _fingerprint| {
+            true
+        }
+    );
+
     glib::MainContext::default().block_on(clone!(
         #[weak]
         app,

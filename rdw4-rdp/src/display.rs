@@ -123,7 +123,17 @@ mod imp {
         }
 
         fn signals() -> &'static [Signal] {
-            &[]
+            static SIGNALS: std::sync::OnceLock<Vec<Signal>> = std::sync::OnceLock::new();
+            SIGNALS.get_or_init(|| {
+                vec![Signal::builder("verify-tls-certificate")
+                    .param_types([
+                        String::static_type(),
+                        String::static_type(),
+                        String::static_type(),
+                    ]).return_type::<bool>()
+                    .build()
+                ]
+            })
         }
 
         fn constructed(&self) {
@@ -298,6 +308,10 @@ mod imp {
                 async move {
                     while let Some(event) = output_event_rx.recv().await {
                         match event {
+                            RdpOutputEvent::TlsNeedsCertVerification { subject, issuer, fingerprint, } => {
+                                let is_verified = this.obj().emit_by_name::<bool>("verify-tls-certificate", &[&subject, &issuer, &fingerprint]);
+                                this.send_event(RdpInputEvent::VerifyTlsCert { is_verified });
+                            }
                             RdpOutputEvent::Connected => {
                                 if let Some(tx) = tx.take() {
                                     tx.send(Ok(())).unwrap();
@@ -613,6 +627,46 @@ impl Display {
 
     pub async fn rdp_disconnect(&self) -> Result<()> {
         self.imp().disconnect().await
+    }
+
+    pub fn connect_verify_tls_certificate<F: Fn(&Self, String, String, String) -> bool + 'static>(
+        &self,
+        f: F,
+    ) -> SignalHandlerId {
+        use std::{
+            ffi::CStr,
+            os::raw::c_char,
+        };
+
+        unsafe extern "C" fn connect_trampoline<P, F: Fn(&P, String, String, String) -> bool + 'static>(
+            this: *mut RdwRdpDisplay,
+            subject: *const c_char,
+            issuer: *const c_char,
+            fingerprint: *const c_char,
+            f: glib::ffi::gpointer,
+        ) -> bool
+        where
+            P: IsA<Display>,
+        {
+            let f = &*(f as *const F);
+            f(
+                Display::from_glib_borrow(this).unsafe_cast_ref::<P>(),
+                CStr::from_ptr(subject).to_str().unwrap().to_owned(),
+                CStr::from_ptr(issuer).to_str().unwrap().to_owned(),
+                CStr::from_ptr(fingerprint).to_str().unwrap().to_owned()
+            )
+        }
+        unsafe {
+            let f: Box<F> = Box::new(f);
+            glib::signal::connect_raw(
+                self.as_ptr() as *mut glib::gobject_ffi::GObject,
+                c"verify-tls-certificate".as_ptr() as *const _,
+                Some(std::mem::transmute::<*const (), unsafe extern "C" fn()>(
+                    connect_trampoline::<Self, F> as *const (),
+                )),
+                Box::into_raw(f),
+            )
+        }
     }
 }
 
