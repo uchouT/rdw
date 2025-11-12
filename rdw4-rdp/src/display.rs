@@ -47,9 +47,10 @@ mod imp {
             pdu::{ClipboardFormatId, OwnedFormatDataResponse},
         },
         connector::Config,
+        graphics::image_processing::PixelFormat as IronRdpPixelFormat,
         pdu::geometry::Rectangle,
     };
-    use rdw::gtk::gdk;
+    use rdw::{gtk::gdk, PixelFormat};
     use std::{
         cell::{Cell, RefCell},
         thread::JoinHandle,
@@ -312,12 +313,28 @@ mod imp {
                                 this.set_connected(false);
                             }
                             RdpOutputEvent::GraphicsUpdate { image, region } => {
-                                trace!("Graphics update received");
+                                trace!("Graphics update received.");
                                 let image = image.lock().unwrap();
+                                trace!("Pixel format: {:?}", image.pixel_format());
+                                let paintable_format = match image.pixel_format() {
+                                    // I'm assuming the A and X variants should be treatable the same,
+                                    // not sure though.
+                                    IronRdpPixelFormat::BgrA32 | IronRdpPixelFormat::BgrX32 => {
+                                        PixelFormat::Bgra
+                                    }
+                                    IronRdpPixelFormat::RgbA32 | IronRdpPixelFormat::RgbX32 => {
+                                        PixelFormat::Rgba
+                                    }
+                                    format => {
+                                        warn!("Unsupported RDP pixel format: {format:?}. Trying BGRA anyway.");
+                                        PixelFormat::Bgra
+                                    }
+                                };
                                 this.obj().set_display_size(Some((
                                     usize::from(image.width()),
                                     usize::from(image.height()),
                                 )));
+                                this.obj().set_display_pixel_format(paintable_format);
                                 let data = image.data_for_rect(&region);
                                 let stride = image.stride() as i32;
                                 let (x, y, w, h) =

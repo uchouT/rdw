@@ -5,7 +5,7 @@ use gtk::{gdk, glib, prelude::*, subclass::prelude::WidgetImpl};
 use crate::RdwD3d11Texture2dScanout;
 #[cfg(unix)]
 use crate::RdwDmabufScanout;
-use crate::{Grab, KeyEvent, Scroll};
+use crate::{Grab, KeyEvent, PixelFormat, Scroll};
 
 #[repr(C)]
 pub struct RdwDisplayClass {
@@ -95,6 +95,9 @@ pub trait DisplayExt: 'static {
     fn display_size(&self) -> Option<(usize, usize)>;
 
     fn set_display_size(&self, size: Option<(usize, usize)>);
+    fn display_pixel_format(&self) -> PixelFormat;
+
+    fn set_display_pixel_format(&self, format: PixelFormat);
 
     fn define_cursor(&self, cursor: Option<gdk::Cursor>);
 
@@ -241,6 +244,44 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
             let (width, height) = size.unwrap_or((0, 0));
             if let Err(e) = imp.picture.paintable().set_size(width, height) {
                 log::warn!("Failed to set size: {e}");
+            }
+
+            self.queue_resize();
+        }
+    }
+
+    fn display_pixel_format(&self) -> PixelFormat {
+        // Safety: safe because IsA<Display>
+        let self_: &Display = unsafe { self.unsafe_cast_ref::<Display>() };
+
+        #[cfg(feature = "bindings")]
+        unsafe {
+            PixelFormat::from_glib(ffi::rdw_display_get_display_pixel_format(
+                self_.to_glib_none().0,
+            ))
+        }
+        #[cfg(not(feature = "bindings"))]
+        {
+            self_.imp().picture.paintable().pixel_format()
+        }
+    }
+
+    fn set_display_pixel_format(&self, format: PixelFormat) {
+        // Safety: safe because IsA<Display>
+        let self_: &Display = unsafe { self.unsafe_cast_ref::<Display>() };
+
+        log::trace!("set_pixel_format: {format:?}");
+        #[cfg(feature = "bindings")]
+        unsafe {
+            let (w, h) = size.unwrap_or_default();
+            ffi::rdw_display_set_display_pixel_format(self_.to_glib_none().0, format.into_glib());
+        }
+        #[cfg(not(feature = "bindings"))]
+        {
+            let imp = self_.imp();
+
+            if let Err(e) = imp.picture.paintable().set_pixel_format(format) {
+                log::warn!("Failed to set pixel format: {e}");
             }
 
             self.queue_resize();

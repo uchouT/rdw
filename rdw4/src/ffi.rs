@@ -28,6 +28,24 @@ mod pure {
         Scroll::static_type().into_glib()
     }
 
+    #[derive(Debug, Eq, PartialEq, Clone, Copy, Enum)]
+    #[enum_type(name = "RdwPixelFormat")]
+    #[repr(C)]
+    pub enum PixelFormat {
+        Bgra = 0,
+        Rgba = 1,
+    }
+
+    pub type RdwPixelFormat = <PixelFormat as IntoGlib>::GlibType;
+
+    pub const RDW_PIXEL_FORMAT_BGRA: RdwPixelFormat = PixelFormat::Bgra as i32;
+    pub const RDW_PIXEL_FORMAT_RGBA: RdwPixelFormat = PixelFormat::Rgba as i32;
+
+    #[no_mangle]
+    pub unsafe extern "C" fn rdw_pixel_format_get_type() -> glib::ffi::GType {
+        PixelFormat::static_type().into_glib()
+    }
+
     #[flags(name = "RdwKeyEvent")]
     #[repr(C)] // See https://github.com/bitflags/bitflags/pull/187
     pub enum KeyEvent {
@@ -81,6 +99,15 @@ mod ffi {
 
     extern "C" {
         pub fn rdw_scroll_get_type() -> glib::ffi::GType;
+    }
+
+    pub type RdwPixelFormat = c_int;
+
+    pub const RDW_PIXEL_FORMAT_BGRA: RdwPixelFormat = 0;
+    pub const RDW_PIXEL_FORMAT_RGBA: RdwPixelFormat = 0;
+
+    extern "C" {
+        pub fn rdw_pixel_format_get_type() -> glib::ffi::GType;
     }
 
     pub type RdwKeyEvent = c_uint;
