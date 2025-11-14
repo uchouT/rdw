@@ -1,4 +1,5 @@
 use std::{
+    iter::once,
     str::{from_utf8, Utf8Error},
     string::FromUtf16Error,
 };
@@ -11,8 +12,16 @@ pub(crate) fn string_from_utf16(data: &[u8]) -> Result<String, FromUtf16Error> {
     String::from_utf16(&utf16)
 }
 
-pub(crate) fn utf16_from_utf8(data: &[u8]) -> Result<Vec<u8>, Utf8Error> {
+pub(crate) fn utf16_from_utf8(
+    data: &[u8],
+    with_null_terminator: bool,
+) -> Result<Vec<u8>, Utf8Error> {
     let utf8 = from_utf8(data)?;
-    let utf16 = utf8.encode_utf16().flat_map(u16::to_ne_bytes).collect();
+    let utf16_iter = utf8.encode_utf16().flat_map(u16::to_ne_bytes);
+    let utf16 = if with_null_terminator {
+        utf16_iter.chain(once(0)).collect()
+    } else {
+        utf16_iter.collect()
+    };
     Ok(utf16)
 }
