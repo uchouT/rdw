@@ -477,7 +477,7 @@ mod imp {
                                     if res.is_ok() {
                                         let bytes = out.steal_as_bytes();
                                         if format_id == ClipboardFormatId::CF_UNICODETEXT {
-                                            data = utf16_from_utf8(bytes.as_ref(), true).ok();
+                                            data = utf16_from_utf8(bytes.as_ref()).ok();
                                         } else {
                                             data = Some(bytes.to_vec());
                                         }
