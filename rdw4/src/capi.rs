@@ -10,6 +10,7 @@ use crate::display::*;
 use crate::egl::RdwD3d11Texture2dScanout;
 #[cfg(unix)]
 use crate::egl::RdwDmabufScanout;
+use crate::ffi::RdwPixelFormat;
 
 #[no_mangle]
 pub extern "C" fn rdw_error_quark() -> glib::ffi::GQuark {
@@ -109,6 +110,29 @@ pub extern "C" fn rdw_display_set_display_size(dpy: *mut RdwDisplay, width: usiz
         None
     };
     this.set_display_size(size);
+}
+
+/// rdw_display_get_display_pixel_format:
+/// @dpy: A #RdwDisplay
+/// @format: (out): current display pixel format
+#[no_mangle]
+pub extern "C" fn rdw_display_get_display_pixel_format(dpy: *mut RdwDisplay) -> RdwPixelFormat {
+    let this: &Display = unsafe { &from_glib_borrow(dpy) };
+    this.display_pixel_format().into_glib()
+}
+
+/// rdw_display_set_display_pixel_format:
+/// @dpy: A #RdwDisplay
+/// @format: pixel format
+///
+/// Set the display pixel format.
+#[no_mangle]
+pub extern "C" fn rdw_display_set_display_pixel_format(
+    dpy: *mut RdwDisplay,
+    format: RdwPixelFormat,
+) {
+    let this: &Display = unsafe { &from_glib_borrow(dpy) };
+    this.set_display_pixel_format(unsafe { crate::enums::PixelFormat::from_glib(format) });
 }
 
 /// rdw_display_define_cursor:

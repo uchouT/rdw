@@ -12,6 +12,7 @@ mod win32;
 
 #[cfg(not(feature = "bindings"))]
 mod paintable;
+
 #[cfg(not(feature = "bindings"))]
 mod picture;
 

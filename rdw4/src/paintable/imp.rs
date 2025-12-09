@@ -1,7 +1,6 @@
+use super::*;
 use gtk::graphene;
 use std::cell::{Cell, OnceCell, RefCell};
-
-use super::*;
 
 #[cfg(windows)]
 mod win32;
@@ -11,7 +10,8 @@ pub struct Paintable {
     ctxt: OnceCell<gdk::GLContext>,
     texture: RefCell<Option<gdk::Texture>>,
     texture_id: Cell<Option<gl::types::GLuint>>,
-    use_rgb: Cell<bool>,
+    pixel_format: Cell<PixelFormat>,
+    use_rgb_fallback: Cell<bool>,
     y0_top: Cell<Option<bool>>,
 
     #[cfg(windows)]
@@ -73,6 +73,10 @@ impl PaintableImpl for Paintable {
 }
 
 impl Paintable {
+    pub(crate) fn pixel_format(&self) -> PixelFormat {
+        self.pixel_format.get()
+    }
+
     pub(crate) fn size(&self) -> (i32, i32) {
         self.texture
             .borrow()
@@ -138,17 +142,20 @@ impl Paintable {
         Ok(())
     }
 
-    pub(crate) fn set_size(&self, w: usize, h: usize) -> Result<(), glib::error::Error> {
-        if self.size() == (w as _, h as _) {
-            return Ok(());
-        }
+    fn recreate_texture(
+        &self,
+        size: (i32, i32),
+        format: PixelFormat,
+    ) -> Result<(), glib::error::Error> {
+        let (w, h) = size;
         let ctxt = self.gl_context()?;
         ctxt.make_current();
 
         unsafe {
             assert_eq!(gl::GetError(), gl::NO_ERROR);
+            self.pixel_format.set(format);
+            self.use_rgb_fallback.set(false);
             gl::BindTexture(gl::TEXTURE_2D, self.texture_id()?);
-            self.use_rgb.set(false);
             gl::TexImage2D(
                 gl::TEXTURE_2D,
                 0,
@@ -156,10 +163,11 @@ impl Paintable {
                 w as _,
                 h as _,
                 0,
-                gl::BGRA,
+                format.as_opengl(),
                 gl::UNSIGNED_BYTE,
                 std::ptr::null(),
             );
+            // Fallback for failing BGRA rendering (try to use RGB instead)
             if gl::GetError() != gl::NO_ERROR {
                 gl::TexImage2D(
                     gl::TEXTURE_2D,
@@ -172,7 +180,7 @@ impl Paintable {
                     gl::UNSIGNED_BYTE,
                     std::ptr::null(),
                 );
-                self.use_rgb.set(true);
+                self.use_rgb_fallback.set(true);
             }
             assert_eq!(gl::GetError(), gl::NO_ERROR);
         }
@@ -180,6 +188,20 @@ impl Paintable {
         self.update_texture(Some((w as _, h as _)), None)?;
         self.obj().invalidate_size();
         Ok(())
+    }
+
+    pub(crate) fn set_pixel_format(&self, format: PixelFormat) -> Result<(), glib::error::Error> {
+        if self.pixel_format() == format {
+            return Ok(());
+        }
+        self.recreate_texture(self.size(), format)
+    }
+
+    pub(crate) fn set_size(&self, w: usize, h: usize) -> Result<(), glib::error::Error> {
+        if self.size() == (w as _, h as _) {
+            return Ok(());
+        }
+        self.recreate_texture((w as _, h as _), self.pixel_format.get())
     }
 
     pub(crate) fn update_area(
@@ -211,12 +233,17 @@ impl Paintable {
             unsafe {
                 gl::BindTexture(gl::TEXTURE_2D, self.texture_id()?);
                 gl::PixelStorei(gl::UNPACK_ROW_LENGTH, stride / 4);
-                if self.use_rgb.get() {
+                if self.use_rgb_fallback.get() {
+                    // RGB rendering fallback
                     let mut rgb = Vec::with_capacity(data.len());
+                    let (ridx, gidx, bidx) = match self.pixel_format.get() {
+                        PixelFormat::Rgba => (0, 1, 2),
+                        PixelFormat::Bgra | _ => (2, 1, 0),
+                    };
                     for pix in data.chunks(4) {
-                        rgb.push(pix[2]);
-                        rgb.push(pix[1]);
-                        rgb.push(pix[0]);
+                        rgb.push(pix[ridx]);
+                        rgb.push(pix[gidx]);
+                        rgb.push(pix[bidx]);
                     }
                     gl::TexSubImage2D(
                         gl::TEXTURE_2D,
@@ -237,7 +264,7 @@ impl Paintable {
                         y,
                         w,
                         h,
-                        gl::BGRA,
+                        self.pixel_format.get().as_opengl(),
                         gl::UNSIGNED_BYTE,
                         data.as_ptr() as _,
                     );

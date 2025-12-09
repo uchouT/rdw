@@ -7,7 +7,7 @@ use ironrdp::{
         ConnectionResult, DesktopSize,
     },
     displaycontrol::{client::DisplayControlClient, pdu::MonitorLayoutEntry},
-    graphics::{image_processing::PixelFormat, pointer::DecodedPointer},
+    graphics::{image_processing::PixelFormat as IronRdpPixelFormat, pointer::DecodedPointer},
     pdu::{
         geometry::InclusiveRectangle,
         input::{
@@ -144,7 +144,7 @@ async fn active_session(
 ) -> Result<RdpControlFlow> {
     let (mut reader, mut writer) = split_tokio_framed(framed);
     let mut image_arc = Arc::new(Mutex::new(DecodedImage::new(
-        PixelFormat::BgrA32,
+        IronRdpPixelFormat::RgbA32,
         connection_result.desktop_size.width,
         connection_result.desktop_size.height,
     )));
@@ -258,7 +258,7 @@ async fn active_session(
                             );
                             // Update image size with the new desktop size.
                             image_arc = Arc::new(Mutex::new(DecodedImage::new(
-                                PixelFormat::BgrA32,
+                                IronRdpPixelFormat::RgbA32,
                                 desktop_size.width,
                                 desktop_size.height,
                             )));

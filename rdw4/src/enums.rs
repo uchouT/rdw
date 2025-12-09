@@ -210,3 +210,82 @@ impl ToValue for KeyEvent {
         <Self as StaticType>::static_type()
     }
 }
+
+/// Pixel formats supported by `Paintable`.
+#[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Clone, Copy, Default)]
+#[non_exhaustive]
+#[repr(C)]
+pub enum PixelFormat {
+    #[default]
+    Bgra,
+    Rgba,
+    __Unknown(i32),
+}
+
+impl PixelFormat {
+    pub fn as_opengl(self) -> u32 {
+        match self {
+            PixelFormat::Rgba => gl::RGBA,
+            PixelFormat::Bgra | _ => gl::BGRA,
+        }
+    }
+}
+
+impl IntoGlib for PixelFormat {
+    type GlibType = ffi::RdwPixelFormat;
+
+    fn into_glib(self) -> ffi::RdwPixelFormat {
+        match self {
+            PixelFormat::Bgra => ffi::RDW_PIXEL_FORMAT_BGRA,
+            PixelFormat::Rgba => ffi::RDW_PIXEL_FORMAT_RGBA,
+            PixelFormat::__Unknown(v) => v,
+        }
+    }
+}
+
+impl FromGlib<ffi::RdwPixelFormat> for PixelFormat {
+    unsafe fn from_glib(value: ffi::RdwPixelFormat) -> Self {
+        match value {
+            ffi::RDW_PIXEL_FORMAT_BGRA => Self::Bgra,
+            ffi::RDW_PIXEL_FORMAT_RGBA => Self::Rgba,
+            value => Self::__Unknown(value),
+        }
+    }
+}
+
+impl StaticType for PixelFormat {
+    fn static_type() -> Type {
+        unsafe { from_glib(ffi::rdw_pixel_format_get_type()) }
+    }
+}
+
+impl ValueType for PixelFormat {
+    type Type = Self;
+}
+
+unsafe impl<'a> FromValue<'a> for PixelFormat {
+    type Checker = GenericValueTypeChecker<Self>;
+
+    unsafe fn from_value(value: &'a Value) -> Self {
+        from_glib(glib::gobject_ffi::g_value_get_enum(
+            ToGlibPtr::to_glib_none(value).0,
+        ))
+    }
+}
+
+impl ToValue for PixelFormat {
+    fn to_value(&self) -> Value {
+        let mut value = Value::for_value_type::<Self>();
+        unsafe {
+            glib::gobject_ffi::g_value_set_enum(
+                ToGlibPtrMut::to_glib_none_mut(&mut value).0,
+                IntoGlib::into_glib(*self),
+            )
+        }
+        value
+    }
+
+    fn value_type(&self) -> Type {
+        <Self as StaticType>::static_type()
+    }
+}

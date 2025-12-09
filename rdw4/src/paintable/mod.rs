@@ -1,3 +1,4 @@
+use crate::PixelFormat;
 use gtk::{cairo, gdk, glib, prelude::*, subclass::prelude::*};
 
 mod imp;
@@ -16,6 +17,14 @@ impl Default for Paintable {
 impl Paintable {
     pub fn new() -> Self {
         glib::Object::new()
+    }
+
+    pub fn set_pixel_format(&self, format: PixelFormat) -> Result<(), glib::error::Error> {
+        self.imp().set_pixel_format(format)
+    }
+
+    pub fn pixel_format(&self) -> PixelFormat {
+        self.imp().pixel_format()
     }
 
     pub fn set_size(&self, w: usize, h: usize) -> Result<(), glib::error::Error> {
