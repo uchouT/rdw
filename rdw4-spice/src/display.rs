@@ -62,6 +62,7 @@ mod imp {
         pub(crate) last_button_state: Cell<Option<i32>>,
         pub(crate) nth_monitor: usize,
         pub(crate) clipboard: [Clipboard; 2],
+        pub(crate) cursor_backup: Cell<Option<gdk::Cursor>>,
     }
 
     #[glib::object_subclass]
@@ -386,17 +387,25 @@ mod imp {
                         cursor.connect_cursor_move(clone!(#[weak] this, move |_cursor, x, y| {
                             log::debug!("cursor-move: {:?}", (x, y));
                             this.obj().set_cursor_position(Some((x as _, y as _)));
+                            // Make cursor visible again if hidden before
+                            if let Some(cursor) = this.cursor_backup.take() {
+                                this.obj().define_cursor(Some(cursor));
+                            }
                         }));
 
                         cursor.connect_cursor_reset(clone!(#[weak] this, move |_cursor| {
                             log::debug!("cursor-reset");
                             this.obj().define_cursor(None);
+                            this.cursor_backup.replace(None);
                         }));
 
                         cursor.connect_cursor_hide(clone!(#[weak] this, move |_cursor| {
                             log::debug!("cursor-hide");
-                            let cursor = gdk::Cursor::from_name("none", None);
-                            this.obj().define_cursor(cursor);
+                            // Backup cursor to show again later
+                            this.cursor_backup.replace(this.obj().cursor());
+                            // Hide cursor
+                            let none_cursor = gdk::Cursor::from_name("none", None);
+                            this.obj().define_cursor(none_cursor);
                         }));
 
                         cursor.connect_cursor_notify(clone!(#[weak] this, move |cursor| {
@@ -414,6 +423,7 @@ mod imp {
                                             1,
                                         );
                                         this.obj().define_cursor(Some(cursor));
+                                        this.cursor_backup.replace(None);
                                     }
                                     e => log::warn!("Unhandled cursor type: {e:?}"),
                                 }
