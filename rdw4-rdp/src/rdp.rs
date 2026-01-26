@@ -26,7 +26,7 @@ use ironrdp::{
 use ironrdp_tokio::{
     reqwest::ReqwestNetworkClient, single_sequence_step_read, split_tokio_framed, FramedWrite,
 };
-use rdw::{gtk::gdk, KeyEvent};
+use rdw::{gtk, gtk::gdk, gtk::glib, KeyEvent};
 use tokio::{net::TcpStream, sync::mpsc};
 use tracing::{debug, trace, warn};
 
@@ -53,8 +53,27 @@ pub(crate) async fn rdp_run(
 ) {
     loop {
         let cb_backend = CbBackend::new(output_event_tx.clone(), rdp_paste.clone());
+        let (subject, issuer, fingerprint, tls_state) =
+            match tls_connect_begin(domain, port, config.clone(), cb_backend).await {
+                Ok(res) => res,
+                Err(err) => {
+                    let _ = output_event_tx.send(RdpOutputEvent::Terminated(Err(err)));
+                    break;
+                }
+            };
+
+        let _ = output_event_tx.send(RdpOutputEvent::TlsNeedsCertVerification { subject, issuer, fingerprint });
+        let mut verified = false;
+        if let RdpInputEvent::VerifyTlsCert { is_verified } = input_event_rx.recv().await.unwrap() {
+            verified = is_verified
+        }
+        if !verified {
+            let _ = output_event_tx.send(RdpOutputEvent::Terminated(Err(Error::Other("TLS Certificate was not verified".to_string()))));
+            break;
+        }
+
         let (connection_result, framed) =
-            match tls_connect(domain, port, config.clone(), cb_backend).await {
+            match tls_connect_finish(domain, tls_state).await {
                 Ok(res) => res,
                 Err(err) => {
                     let _ = output_event_tx.send(RdpOutputEvent::Terminated(Err(err)));
@@ -82,12 +101,19 @@ pub(crate) async fn rdp_run(
     }
 }
 
-async fn tls_connect(
+struct TlsConnectState {
+    connector: ClientConnector,
+    upgraded_stream: ironrdp_tls::TlsStream<TcpStream>,
+    should_upgrade: ironrdp_tokio::ShouldUpgrade,
+    certificate: x509_cert::certificate::Certificate,
+}
+
+async fn tls_connect_begin(
     domain: &str,
     port: u16,
     config: Config,
-    cb_backend: CbBackend,
-) -> Result<(ConnectionResult, UpgradedFramed)> {
+    cb_backend: CbBackend
+) -> Result<(String, String, String, TlsConnectState)> {
     let stream = TcpStream::connect(format!("{domain}:{port}")).await?;
     let server_addr = stream.peer_addr()?;
 
@@ -113,19 +139,40 @@ async fn tls_connect(
     // Ensure there is no leftover
     let initial_stream = framed.into_inner_no_leftover();
 
-    let (upgraded_stream, server_public_key) = ironrdp_tls::upgrade(initial_stream, domain).await?;
+    let (upgraded_stream, certificate) = ironrdp_tls::upgrade(initial_stream, domain).await?;
 
-    let upgraded = ironrdp_tokio::mark_as_upgraded(should_upgrade, &mut connector);
+    use x509_cert::der::Encode as _;
+    let mut checksum = glib::Checksum::new(glib::ChecksumType::Sha256)
+        .ok_or_else(|| Error::Other("could not create SHA256".to_string()))?;
+    checksum.update(&certificate.to_der().map_err(|e| Error::Other(format!("{e}")))?);
+    let fingerprint = checksum.digest();
+    let mut fingerprint_string = String::new();
+    for byte in fingerprint {
+        fingerprint_string += &*format!("{:X}:", byte);
+    }
 
-    let mut upgraded_framed = ironrdp_tokio::TokioFramed::new(upgraded_stream);
+    let tbs_certificate = certificate.tbs_certificate.clone();
+    Ok((tbs_certificate.subject.to_string(), tbs_certificate.issuer.to_string(), fingerprint_string,
+        TlsConnectState { connector, upgraded_stream, should_upgrade, certificate }))
+}
+
+async fn tls_connect_finish(
+    domain: &str,
+    mut tls_state: TlsConnectState
+) -> Result<(ConnectionResult, UpgradedFramed)> {
+    let upgraded = ironrdp_tokio::mark_as_upgraded(tls_state.should_upgrade, &mut tls_state.connector);
+
+    let mut upgraded_framed = ironrdp_tokio::TokioFramed::new(tls_state.upgraded_stream);
 
     let mut network_client = ReqwestNetworkClient::new();
+
     let connection_result = ironrdp_tokio::connect_finalize(
         upgraded,
         &mut upgraded_framed,
-        connector,
+        tls_state.connector,
         domain.into(),
-        server_public_key,
+        ironrdp_tls::extract_tls_server_public_key(&tls_state.certificate)
+            .ok_or_else(|| Error::Other("subject public key BIT STRING is not aligned".to_string()))?.to_owned(),
         Some(&mut network_client),
         None,
     )
@@ -164,6 +211,7 @@ async fn active_session(
                 let input_event = input_event.ok_or_else(|| { Error::Other("Input event not received".to_string()) })?;
 
                 match input_event {
+                    RdpInputEvent::VerifyTlsCert { is_verified } => { continue 'outer; }, // This should never happen
                     RdpInputEvent::Resize { width, height, scale_factor, physical_size } => {
                         trace!(width, height, "Resize event");
                         let (width, height) = MonitorLayoutEntry::adjust_display_size(width.into(), height.into());
@@ -323,6 +371,9 @@ pub enum RdpInputEvent {
     Close,
     ClipboardResponseInitialCopy(Vec<ClipboardFormat>),
     Clipboard(ClipboardMessage),
+    VerifyTlsCert {
+        is_verified: bool,
+    },
 }
 
 impl RdpInputEvent {
@@ -334,6 +385,11 @@ impl RdpInputEvent {
 #[derive(Debug)]
 pub enum RdpOutputEvent {
     Connected,
+    TlsNeedsCertVerification {
+        subject: String,
+        issuer: String,
+        fingerprint: String,
+    },
     GraphicsUpdate {
         image: Arc<Mutex<DecodedImage>>,
         region: InclusiveRectangle,
