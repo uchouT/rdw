@@ -18,7 +18,7 @@ system-deps = "7.0"
 rdw4-rdp = { version = "0.1", feature = "bindings" }
 
 [dependencies]
-ironrdp = { version = "0.11.0", features = [
+ironrdp = { version = "0.14.0", features = [
     "cliprdr",
     "dvc",
     "displaycontrol",
@@ -29,19 +29,19 @@ ironrdp = { version = "0.11.0", features = [
     "pdu",
     "rdpsnd",
 ] }
-ironrdp-tokio = { version = "0.6", features = ["reqwest"] }
+ironrdp-tokio = { version = "0.8", features = ["reqwest"] }
 ironrdp-tls = { version = "0.2.0", features = ["native-tls"] }
 x509-cert = { version = "0.2", default-features = false, features = ["std"] }
 thiserror = "2.0.12"
 tokio = { version = "1.44.1", features = ["net", "rt", "macros"] }
 derivative = "2.2.0"
 rdw = { package = "rdw4", path = "../rdw4", default-features = false }
-nix = { version = "0.30", features = ["fs", "event"] }
+nix = { version = "0.31", features = ["fs", "event"] }
 futures-executor = "0.3"
 futures-util = "0.3"
 futures-channel = "0.3"
 tracing = "0.1"
-whoami = "1.6.0"
+whoami = "2.0"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = [

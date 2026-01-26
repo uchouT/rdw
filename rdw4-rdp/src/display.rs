@@ -4,14 +4,14 @@ use ironrdp::{
     connector,
     pdu::{
         gcc::KeyboardType,
-        rdp::{capability_sets::MajorPlatformType, client_info::PerformanceFlags},
+        rdp::{
+            capability_sets::MajorPlatformType,
+            client_info::{PerformanceFlags, TimezoneInfo},
+        },
     },
 };
 
-use rdw::{
-    gtk::{self, subclass::prelude::*},
-    DisplayExt,
-};
+use rdw::{gtk, gtk::subclass::prelude::*, DisplayExt};
 
 use crate::{Error, Result};
 
@@ -607,26 +607,27 @@ impl Display {
             desktop_scale_factor: 0, // Default to 0 per FreeRDP
             bitmap: None,
             client_build: 0,
-            client_name: whoami::fallible::hostname().unwrap_or_else(|_| "ironrdp".to_owned()),
+            client_name: whoami::hostname().unwrap_or_else(|_| "ironrdp".to_owned()),
             // NOTE: hardcode this value like in freerdp
             // https://github.com/FreeRDP/FreeRDP/blob/4e24b966c86fdf494a782f0dfcfc43a057a2ea60/libfreerdp/core/settings.c#LL49C34-L49C70
             client_dir: "C:\\Windows\\System32\\mstscax.dll".to_owned(),
             platform: match whoami::platform() {
                 whoami::Platform::Windows => MajorPlatformType::WINDOWS,
                 whoami::Platform::Linux => MajorPlatformType::UNIX,
-                whoami::Platform::MacOS => MajorPlatformType::MACINTOSH,
+                whoami::Platform::Mac => MajorPlatformType::MACINTOSH,
                 whoami::Platform::Ios => MajorPlatformType::IOS,
                 whoami::Platform::Android => MajorPlatformType::ANDROID,
                 _ => MajorPlatformType::UNSPECIFIED,
             },
             hardware_id: None,
             license_cache: None,
-            no_server_pointer: false,
+            enable_server_pointer: true,
             autologon: true,
-            no_audio_playback: false,
+            enable_audio_playback: true,
             request_data: None,
             pointer_software_rendering: false,
             performance_flags: PerformanceFlags::default(),
+            timezone_info: TimezoneInfo::default(),
         };
 
         self.imp().connect(domain, port, config).await

@@ -187,15 +187,15 @@ async fn tls_connect_finish(
 
     let connection_result = ironrdp_tokio::connect_finalize(
         upgraded,
-        &mut upgraded_framed,
         tls_state.connector,
+        &mut upgraded_framed,
+        &mut network_client,
         domain.into(),
         ironrdp_tls::extract_tls_server_public_key(&tls_state.certificate)
             .ok_or_else(|| {
                 Error::Other("subject public key BIT STRING is not aligned".to_string())
             })?
             .to_owned(),
-        Some(&mut network_client),
         None,
     )
     .await?;
@@ -318,9 +318,9 @@ async fn active_session(
                             io_channel_id,
                             user_channel_id,
                             desktop_size,
-                            no_server_pointer,
+                            enable_server_pointer,
                             pointer_software_rendering,
-                        } = connection_activation.state
+                        } = connection_activation.connection_activation_state()
                         {
                             debug!(
                                 ?desktop_size,
@@ -337,12 +337,12 @@ async fn active_session(
                                 fast_path::ProcessorBuilder {
                                     io_channel_id,
                                     user_channel_id,
-                                    no_server_pointer,
+                                    enable_server_pointer,
                                     pointer_software_rendering,
                                 }
                                 .build(),
                             );
-                            active_stage.set_no_server_pointer(no_server_pointer);
+                            active_stage.set_enable_server_pointer(enable_server_pointer);
                             break 'activation_seq;
                         }
                     }

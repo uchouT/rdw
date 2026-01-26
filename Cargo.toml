@@ -15,5 +15,5 @@ resolver = "2"
 default-members = ["demo"]
 
 [workspace.dependencies]
-cargo_metadata = "0.21"
+cargo_metadata = "0.23"
 gtk = { package = "gtk4", version = "0.10" }
