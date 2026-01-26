@@ -70,9 +70,15 @@ impl Helper {
             #[upgrade_or_panic]
             async move {
                 let mut obj = display.clone();
-                std::future::poll_fn(|cx| queue.poll_dispatch_pending(cx, &mut obj))
-                    .await
-                    .unwrap();
+                loop {
+                    if std::future::poll_fn(|cx| queue.poll_dispatch_pending(cx, &mut obj))
+                        .await
+                        .is_err()
+                    {
+                        log::error!("Failed to poll wayland display");
+                        break;
+                    }
+                }
             }
         ));
         self.source.set(Some(source))
