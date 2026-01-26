@@ -130,9 +130,9 @@ mod imp {
                         String::static_type(),
                         String::static_type(),
                         String::static_type(),
-                    ]).return_type::<bool>()
-                    .build()
-                ]
+                    ])
+                    .return_type::<bool>()
+                    .build()]
             })
         }
 
@@ -308,8 +308,15 @@ mod imp {
                 async move {
                     while let Some(event) = output_event_rx.recv().await {
                         match event {
-                            RdpOutputEvent::TlsNeedsCertVerification { subject, issuer, fingerprint, } => {
-                                let is_verified = this.obj().emit_by_name::<bool>("verify-tls-certificate", &[&subject, &issuer, &fingerprint]);
+                            RdpOutputEvent::TlsNeedsCertVerification {
+                                subject,
+                                issuer,
+                                fingerprint,
+                            } => {
+                                let is_verified = this.obj().emit_by_name::<bool>(
+                                    "verify-tls-certificate",
+                                    &[&subject, &issuer, &fingerprint],
+                                );
                                 this.send_event(RdpInputEvent::VerifyTlsCert { is_verified });
                             }
                             RdpOutputEvent::Connected => {
@@ -629,16 +636,18 @@ impl Display {
         self.imp().disconnect().await
     }
 
-    pub fn connect_verify_tls_certificate<F: Fn(&Self, String, String, String) -> bool + 'static>(
+    pub fn connect_verify_tls_certificate<
+        F: Fn(&Self, String, String, String) -> bool + 'static,
+    >(
         &self,
         f: F,
     ) -> SignalHandlerId {
-        use std::{
-            ffi::CStr,
-            os::raw::c_char,
-        };
+        use std::{ffi::CStr, os::raw::c_char};
 
-        unsafe extern "C" fn connect_trampoline<P, F: Fn(&P, String, String, String) -> bool + 'static>(
+        unsafe extern "C" fn connect_trampoline<
+            P,
+            F: Fn(&P, String, String, String) -> bool + 'static,
+        >(
             this: *mut RdwRdpDisplay,
             subject: *const c_char,
             issuer: *const c_char,
@@ -653,7 +662,7 @@ impl Display {
                 Display::from_glib_borrow(this).unsafe_cast_ref::<P>(),
                 CStr::from_ptr(subject).to_str().unwrap().to_owned(),
                 CStr::from_ptr(issuer).to_str().unwrap().to_owned(),
-                CStr::from_ptr(fingerprint).to_str().unwrap().to_owned()
+                CStr::from_ptr(fingerprint).to_str().unwrap().to_owned(),
             )
         }
         unsafe {
