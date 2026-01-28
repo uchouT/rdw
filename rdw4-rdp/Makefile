@@ -36,10 +36,10 @@ $(GIR): $(HEADER)
 		--namespace RdwRdp --nsversion=4.0 \
 		--identifier-prefix RdwRdp \
 		--c-include "rdw-rdp.h" \
-		-I$(PREFIX)/include \
 		-Iinst/$(PREFIX)/include \
-		-L$(PREFIX)/$(LIB) \
+		-I$(PREFIX)/include \
 		-Linst/$(PREFIX)/$(LIB) \
+		-L$(PREFIX)/$(LIB) \
 		--library=rdw4-rdp \
 		--include=Rdw-4.0 --pkg rdw4 \
 		--output $@ \

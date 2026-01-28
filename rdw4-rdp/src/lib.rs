@@ -15,6 +15,8 @@ mod util;
 #[cfg(feature = "capi")]
 mod capi;
 
+mod ffi;
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Already connected")]

@@ -1,13 +1,11 @@
 use glib::{clone, translate::*, SignalHandlerId};
 use gtk::{glib, prelude::*};
+pub use ironrdp::pdu::rdp::client_info::PerformanceFlags;
 use ironrdp::{
     connector,
     pdu::{
         gcc::KeyboardType,
-        rdp::{
-            capability_sets::MajorPlatformType,
-            client_info::{PerformanceFlags, TimezoneInfo},
-        },
+        rdp::{capability_sets::MajorPlatformType, client_info::TimezoneInfo},
     },
 };
 
@@ -89,6 +87,7 @@ mod imp {
             blurb = "Whether the RDP connection is up and running"
         )]
         connected: Cell<bool>,
+        pub(crate) performance_flags: Cell<PerformanceFlags>,
     }
 
     impl Default for Display {
@@ -100,6 +99,7 @@ mod imp {
                 connected: Default::default(),
                 rdp_thread: Default::default(),
                 input_event_tx: Default::default(),
+                performance_flags: Default::default(),
             }
         }
     }
@@ -575,8 +575,12 @@ glib::wrapper! {
 }
 
 impl Display {
-    pub fn new() -> Self {
-        glib::Object::new::<Self>()
+    pub fn new(performance_flags: Option<PerformanceFlags>) -> Self {
+        let this: Self = glib::Object::new();
+        this.imp()
+            .performance_flags
+            .set(performance_flags.unwrap_or_default());
+        this
     }
 
     pub async fn rdp_connect(
@@ -626,7 +630,7 @@ impl Display {
             enable_audio_playback: true,
             request_data: None,
             pointer_software_rendering: false,
-            performance_flags: PerformanceFlags::default(),
+            performance_flags: self.imp().performance_flags.get(),
             timezone_info: TimezoneInfo::default(),
         };
 
@@ -682,6 +686,6 @@ impl Display {
 
 impl Default for Display {
     fn default() -> Self {
-        Self::new()
+        Self::new(None)
     }
 }

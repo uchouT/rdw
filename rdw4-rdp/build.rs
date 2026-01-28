@@ -25,6 +25,7 @@ fn main() {
         std::fs::create_dir_all(&out_include).unwrap();
 
         let mut config = cbindgen::Config::default();
+        config.macro_expansion.bitflags = true;
         let warning = config.autogen_warning.unwrap_or_default();
         let version_info = format!(
             r"

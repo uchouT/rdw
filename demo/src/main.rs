@@ -73,7 +73,7 @@ async fn show_password_dialog(
 }
 
 fn rdp_display(app: &adw::Application, uri: glib::Uri) -> rdw::Display {
-    let rdp = rdw_rdp::Display::new();
+    let rdp = rdw_rdp::Display::new(None);
 
     let port = match uri.port() {
         -1 => 3389,
