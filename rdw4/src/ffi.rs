@@ -104,7 +104,7 @@ mod ffi {
     pub type RdwPixelFormat = c_int;
 
     pub const RDW_PIXEL_FORMAT_BGRA: RdwPixelFormat = 0;
-    pub const RDW_PIXEL_FORMAT_RGBA: RdwPixelFormat = 0;
+    pub const RDW_PIXEL_FORMAT_RGBA: RdwPixelFormat = 1;
 
     extern "C" {
         pub fn rdw_pixel_format_get_type() -> glib::ffi::GType;

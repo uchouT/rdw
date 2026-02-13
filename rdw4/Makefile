@@ -36,11 +36,15 @@ $(GIR): $(HEADER)
 		--namespace Rdw --nsversion=4.0 \
 		--identifier-prefix Rdw \
 		--c-include "rdw.h" \
-		-I$(PREFIX)/include \
 		-Iinst/$(PREFIX)/include \
-		-L$(PREFIX)/$(LIB) \
+		-I$(PREFIX)/include \
 		-Linst/$(PREFIX)/$(LIB) \
+		-L$(PREFIX)/$(LIB) \
 		--include=Gtk-4.0 --pkg gtk4 \
+		--extra-library=wayland-client \
+		--extra-library=EGL \
+		--extra-library=epoxy \
+		--extra-library=usb-1.0 \
 		--library=rdw4 \
 		--output $@ \
 		$<
