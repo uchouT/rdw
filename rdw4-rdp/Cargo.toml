@@ -41,7 +41,7 @@ futures-executor = "0.3"
 futures-util = "0.3"
 futures-channel = "0.3"
 tracing = "0.1"
-whoami = "2.0"
+whoami = "2.1"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = [
