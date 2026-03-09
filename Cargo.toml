@@ -16,4 +16,4 @@ default-members = ["demo"]
 
 [workspace.dependencies]
 cargo_metadata = "0.23"
-gtk = { package = "gtk4", version = "0.10" }
+gtk = { package = "gtk4", version = "0.11" }

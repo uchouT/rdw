@@ -26,4 +26,4 @@ rdw-vnc = { package = "rdw4-vnc", path = "../rdw4-vnc", default-features = false
 [dependencies.adw]
 package = "libadwaita"
 features = ["v1_3"]
-version = "0.8"
+version = "0.9"
