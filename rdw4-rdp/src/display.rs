@@ -9,9 +9,10 @@ use ironrdp::{
     },
 };
 
-use rdw::{gtk, gtk::subclass::prelude::*, DisplayExt};
-
 use crate::{Error, Result};
+use rdw::gtk::glib::ffi::GByteArray;
+use rdw::gtk::glib::ByteArray;
+use rdw::{gtk, gtk::subclass::prelude::*, DisplayExt};
 
 #[repr(C)]
 pub struct RdwRdpDisplay {
@@ -48,6 +49,7 @@ mod imp {
         graphics::image_processing::PixelFormat as IronRdpPixelFormat,
         pdu::geometry::Rectangle,
     };
+    use rdw::gtk::glib::ByteArray;
     use rdw::{gtk::gdk, PixelFormat};
     use std::{
         cell::{Cell, RefCell},
@@ -126,11 +128,7 @@ mod imp {
             static SIGNALS: std::sync::OnceLock<Vec<Signal>> = std::sync::OnceLock::new();
             SIGNALS.get_or_init(|| {
                 vec![Signal::builder("verify-tls-certificate")
-                    .param_types([
-                        String::static_type(),
-                        String::static_type(),
-                        String::static_type(),
-                    ])
+                    .param_types([ByteArray::static_type()])
                     .return_type::<bool>()
                     .build()]
             })
@@ -308,14 +306,10 @@ mod imp {
                 async move {
                     while let Some(event) = output_event_rx.recv().await {
                         match event {
-                            RdpOutputEvent::TlsNeedsCertVerification {
-                                subject,
-                                issuer,
-                                fingerprint,
-                            } => {
+                            RdpOutputEvent::TlsNeedsCertVerification { certificate } => {
                                 let is_verified = this.obj().emit_by_name::<bool>(
                                     "verify-tls-certificate",
-                                    &[&subject, &issuer, &fingerprint],
+                                    &[&ByteArray::from(&certificate)],
                                 );
                                 this.send_event(RdpInputEvent::VerifyTlsCert { is_verified });
                             }
@@ -641,22 +635,13 @@ impl Display {
         self.imp().disconnect().await
     }
 
-    pub fn connect_verify_tls_certificate<
-        F: Fn(&Self, String, String, String) -> bool + 'static,
-    >(
+    pub fn connect_verify_tls_certificate<F: Fn(&Self, ByteArray) -> bool + 'static>(
         &self,
         f: F,
     ) -> SignalHandlerId {
-        use std::{ffi::CStr, os::raw::c_char};
-
-        unsafe extern "C" fn connect_trampoline<
-            P,
-            F: Fn(&P, String, String, String) -> bool + 'static,
-        >(
+        unsafe extern "C" fn connect_trampoline<P, F: Fn(&P, ByteArray) -> bool + 'static>(
             this: *mut RdwRdpDisplay,
-            subject: *const c_char,
-            issuer: *const c_char,
-            fingerprint: *const c_char,
+            certificate: *mut GByteArray,
             f: glib::ffi::gpointer,
         ) -> bool
         where
@@ -665,9 +650,7 @@ impl Display {
             let f = &*(f as *const F);
             f(
                 Display::from_glib_borrow(this).unsafe_cast_ref::<P>(),
-                CStr::from_ptr(subject).to_str().unwrap().to_owned(),
-                CStr::from_ptr(issuer).to_str().unwrap().to_owned(),
-                CStr::from_ptr(fingerprint).to_str().unwrap().to_owned(),
+                ByteArray::from_glib_borrow(certificate).clone(),
             )
         }
         unsafe {
