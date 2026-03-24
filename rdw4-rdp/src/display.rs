@@ -226,8 +226,19 @@ mod imp {
                 #[upgrade_or_panic]
                 move |_, dx, dy| {
                     trace!(?dx, ?dy, "scroll");
+
+                    // RDP expects wheel rotation in multiples of WHEEL_DELTA (120).
+                    // GTK scroll deltas are normalized between 0.0 - 1.0 .
+                    // Additionally the deltas are flipped from what RDP expects.
+                    const WHEEL_DELTA: f64 = -120.0;
+
+                    // TODO: This causes some fractional scrolling to get lost, could
+                    // be accumulated potentially.
+                    let units_x = (dx * WHEEL_DELTA) as i16;
+                    let units_y = (dy * WHEEL_DELTA) as i16;
+
                     let (x_position, y_position) = this.last_mouse.get();
-                    let fp = rdp_scroll(dx as _, dy as _, x_position as _, y_position as _);
+                    let fp = rdp_scroll(units_x, units_y, x_position as _, y_position as _);
                     this.send_event(RdpInputEvent::FastPath(fp));
                     glib::Propagation::Proceed
                 }
