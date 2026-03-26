@@ -183,258 +183,335 @@ mod imp {
 
             let session = &self.session;
 
-            session.connect_channel_new(clone!(#[weak(rename_to = this)] self, move |_session, channel| {
-                use spice::ChannelType::{self, *};
+            // we connect after other signal handlers to allow implementations to setup before
+            // connecting any channels
+            ObjectExt::connect_closure(
+                session,
+                "channel-new",
+                true,
+                glib::closure_local!(
+                    #[weak(rename_to = this)]
+                    self,
+                    move |_session: &spice::Session, channel: &spice::Channel| {
+                        use spice::ChannelType::{self, *};
 
-                let Ok(type_) = ChannelType::try_from(channel.channel_type()) else {
-                    return;
-                };
+                        let Ok(type_) = ChannelType::try_from(channel.channel_type()) else {
+                            return;
+                        };
 
-                match type_ {
-                    Main => {
-                        let main = channel.clone().downcast::<spice::MainChannel>().unwrap();
-                        this.main.set(Some(&main));
+                        match type_ {
+                            Main => {
+                                let main =
+                                    channel.clone().downcast::<spice::MainChannel>().unwrap();
+                                this.main.set(Some(&main));
 
-                        main.connect_channel_event(clone!(#[weak] this, move |_, event| {
-                            use spice::ChannelEvent::*;
+                                main.connect_channel_event(clone!(
+                                    #[weak]
+                                    this,
+                                    move |_, event| {
+                                        use spice::ChannelEvent::*;
 
-                            if event == Closed {
-                                this.session.disconnect();
-                            }
-                        }));
-
-                        main.connect_main_mouse_update(clone!(#[weak] this, move |main| {
-                            let mode = spice::MouseMode::from_bits_truncate(main.mouse_mode());
-                            log::debug!("mouse-update: {mode:?}");
-                            this.obj().set_mouse_absolute(mode.contains(spice::MouseMode::CLIENT));
-                        }));
-
-                        main.connect_main_clipboard_selection(clone!(#[weak] this, move |_main, selection, type_, data| {
-                            log::debug!("clipboard-data: {:?}", (selection, type_, data.len()));
-                            if let Some((req_type, mut tx)) = this.clipboard[selection as usize].tx.take() {
-                                if type_ != req_type as u32 {
-                                    log::warn!("Didn't get expected type from guest clipboard!");
-                                    return;
-                                }
-                                if let Err(e) = tx.try_send(glib::Bytes::from(data)) {
-                                    log::warn!("Failed to send clipboard data to future: {e}");
-                                }
-                            }
-                        }));
-
-                        main.connect_main_clipboard_selection_grab(clone!(#[weak] this, move |_main, selection, types| {
-                            let types: Vec<_> = types.iter()
-                                                     .filter_map(|&t| spice::ClipboardFormat::try_from(t as i32).ok())
-                                                     .filter_map(util::mime_from_format)
-                                                     .collect();
-                            log::debug!("clipboard-grab: {:?}", (selection, &types));
-                            if let Some(clipboard) = this.clipboard_from_selection(selection) {
-                                let content = rdw::ContentProvider::new(&types, clone!(#[weak] this, #[upgrade_or] None, move |mime, stream, prio| {
-                                    log::debug!("content-provider-write: {:?}", (mime, stream));
-                                    let format = match util::format_from_mime(mime) {
-                                        Some(f) => f,
-                                        None => return None,
-                                    };
-
-                                    Some(Box::pin(clone!(#[weak] this, #[strong] stream, #[upgrade_or_panic] async move {
-                                        use futures_util::StreamExt;
-
-                                        if this.clipboard[selection as usize].tx.borrow().is_some() {
-                                            return Err(glib::Error::new(gio::IOErrorEnum::Failed, "clipboard request pending"));
+                                        if event == Closed {
+                                            this.session.disconnect();
                                         }
+                                    }
+                                ));
 
-                                        if let Some(main) = this.main.upgrade() {
-                                            let (tx, mut rx) = futures_channel::mpsc::channel(1);
-                                            this.clipboard[selection as usize].tx.replace(Some((format, tx)));
-                                            main.clipboard_selection_request(selection, format as u32);
-                                            if let Some(bytes) = rx.next().await {
-                                                return stream.write_bytes_future(&bytes, prio).await.map(|_| ());
-                                            }
+                                main.connect_main_mouse_update(clone!(
+                                    #[weak]
+                                    this,
+                                    move |main| {
+                                        let mode =
+                                            spice::MouseMode::from_bits_truncate(main.mouse_mode());
+                                        log::debug!("mouse-update: {mode:?}");
+                                        this.obj().set_mouse_absolute(
+                                            mode.contains(spice::MouseMode::CLIENT),
+                                        );
+                                    }
+                                ));
+
+                                main.connect_main_clipboard_selection(clone!(#[weak] this, move |_main, selection, type_, data| {
+                                    log::debug!("clipboard-data: {:?}", (selection, type_, data.len()));
+                                    if let Some((req_type, mut tx)) = this.clipboard[selection as usize].tx.take() {
+                                        if type_ != req_type as u32 {
+                                            log::warn!("Didn't get expected type from guest clipboard!");
+                                            return;
                                         }
-
-                                        Err(glib::Error::new(gio::IOErrorEnum::Failed, "failed to request clipboard data"))
-                                    })))
+                                        if let Err(e) = tx.try_send(glib::Bytes::from(data)) {
+                                            log::warn!("Failed to send clipboard data to future: {e}");
+                                        }
+                                    }
                                 }));
-                                if let Err(e) = clipboard.set_content(Some(&content)) {
-                                    log::warn!("Failed to set clipboard grab: {e}");
-                                }
-                            }
-                        }));
 
-                        main.connect_main_clipboard_selection_release(clone!(#[weak] this, move |_main, selection| {
-                            log::debug!("clipboard-release: {selection:?}");
-                            if let Some(clipboard) = this.clipboard_from_selection(selection) {
-                                if let Err(e) = clipboard.set_content(gdk::ContentProvider::NONE) {
-                                    log::warn!("Failed to release clipboard: {e}");
-                                }
-                            }
-                        }));
+                                main.connect_main_clipboard_selection_grab(clone!(#[weak] this, move |_main, selection, types| {
+                                    let types: Vec<_> = types.iter()
+                                                             .filter_map(|&t| spice::ClipboardFormat::try_from(t as i32).ok())
+                                                             .filter_map(util::mime_from_format)
+                                                             .collect();
+                                    log::debug!("clipboard-grab: {:?}", (selection, &types));
+                                    if let Some(clipboard) = this.clipboard_from_selection(selection) {
+                                        let content = rdw::ContentProvider::new(&types, clone!(#[weak] this, #[upgrade_or] None, move |mime, stream, prio| {
+                                            log::debug!("content-provider-write: {:?}", (mime, stream));
+                                            let format = match util::format_from_mime(mime) {
+                                                Some(f) => f,
+                                                None => return None,
+                                            };
 
-                        main.connect_main_clipboard_selection_request(clone!(#[weak] this, #[upgrade_or] false, move |main, selection, type_| {
-                            let mime = spice::ClipboardFormat::try_from(type_ as i32).map_or(None, util::mime_from_format);
-                            log::debug!("clipboard-request: {:?}", (selection, mime));
+                                            Some(Box::pin(clone!(#[weak] this, #[strong] stream, #[upgrade_or_panic] async move {
+                                                use futures_util::StreamExt;
 
-                            if let (Some(mime), Some(clipboard)) = (mime, this.clipboard_from_selection(selection)) {
-                                glib::MainContext::default().spawn_local(glib::clone!(#[weak] clipboard, #[strong] main, async move {
-                                    let res = clipboard.read_future(&[mime], glib::Priority::default()).await;
-                                    log::debug!("clipboard-read: {:?}", res);
-
-                                    if let Ok((stream, mime)) = res {
-                                        if let Some(format) = util::format_from_mime(&mime) {
-                                            let out = gio::MemoryOutputStream::new_resizable();
-                                            let res = out.splice_future(
-                                                &stream,
-                                                gio::OutputStreamSpliceFlags::CLOSE_SOURCE | gio::OutputStreamSpliceFlags::CLOSE_TARGET,
-                                                glib::Priority::default()).await;
-                                            match res {
-                                                Ok(size) => {
-                                                    let data = out.steal_as_bytes();
-                                                    main.clipboard_selection_notify(selection, format as u32, data.as_ref());
-                                                    log::debug!("clipboard-sent: {size}");
-                                                    return;
+                                                if this.clipboard[selection as usize].tx.borrow().is_some() {
+                                                    return Err(glib::Error::new(gio::IOErrorEnum::Failed, "clipboard request pending"));
                                                 }
-                                                Err(e) => {
-                                                    log::warn!("Failed to read clipboard: {e}");
+
+                                                if let Some(main) = this.main.upgrade() {
+                                                    let (tx, mut rx) = futures_channel::mpsc::channel(1);
+                                                    this.clipboard[selection as usize].tx.replace(Some((format, tx)));
+                                                    main.clipboard_selection_request(selection, format as u32);
+                                                    if let Some(bytes) = rx.next().await {
+                                                        return stream.write_bytes_future(&bytes, prio).await.map(|_| ());
+                                                    }
                                                 }
+
+                                                Err(glib::Error::new(gio::IOErrorEnum::Failed, "failed to request clipboard data"))
+                                            })))
+                                        }));
+                                        if let Err(e) = clipboard.set_content(Some(&content)) {
+                                            log::warn!("Failed to set clipboard grab: {e}");
+                                        }
+                                    }
+                                }));
+
+                                main.connect_main_clipboard_selection_release(clone!(
+                                    #[weak]
+                                    this,
+                                    move |_main, selection| {
+                                        log::debug!("clipboard-release: {selection:?}");
+                                        if let Some(clipboard) =
+                                            this.clipboard_from_selection(selection)
+                                        {
+                                            if let Err(e) =
+                                                clipboard.set_content(gdk::ContentProvider::NONE)
+                                            {
+                                                log::warn!("Failed to release clipboard: {e}");
                                             }
                                         }
                                     }
-                                    main.clipboard_selection_notify(selection, 0, &[]);
+                                ));
+
+                                main.connect_main_clipboard_selection_request(clone!(#[weak] this, #[upgrade_or] false, move |main, selection, type_| {
+                                    let mime = spice::ClipboardFormat::try_from(type_ as i32).map_or(None, util::mime_from_format);
+                                    log::debug!("clipboard-request: {:?}", (selection, mime));
+
+                                    if let (Some(mime), Some(clipboard)) = (mime, this.clipboard_from_selection(selection)) {
+                                        glib::MainContext::default().spawn_local(glib::clone!(#[weak] clipboard, #[strong] main, async move {
+                                            let res = clipboard.read_future(&[mime], glib::Priority::default()).await;
+                                            log::debug!("clipboard-read: {:?}", res);
+
+                                            if let Ok((stream, mime)) = res {
+                                                if let Some(format) = util::format_from_mime(&mime) {
+                                                    let out = gio::MemoryOutputStream::new_resizable();
+                                                    let res = out.splice_future(
+                                                        &stream,
+                                                        gio::OutputStreamSpliceFlags::CLOSE_SOURCE | gio::OutputStreamSpliceFlags::CLOSE_TARGET,
+                                                        glib::Priority::default()).await;
+                                                    match res {
+                                                        Ok(size) => {
+                                                            let data = out.steal_as_bytes();
+                                                            main.clipboard_selection_notify(selection, format as u32, data.as_ref());
+                                                            log::debug!("clipboard-sent: {size}");
+                                                            return;
+                                                        }
+                                                        Err(e) => {
+                                                            log::warn!("Failed to read clipboard: {e}");
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            main.clipboard_selection_notify(selection, 0, &[]);
+                                        }));
+                                    }
+                                    true
                                 }));
                             }
-                            true
-                        }));
-                    },
-                    Inputs => {
-                        let input = channel.clone().downcast::<spice::InputsChannel>().unwrap();
-                        this.input.set(Some(&input));
+                            Inputs => {
+                                let input =
+                                    channel.clone().downcast::<spice::InputsChannel>().unwrap();
+                                this.input.set(Some(&input));
 
-                        input.connect_inputs_modifiers(clone!(move |input| {
-                            let modifiers = input.key_modifiers();
-                            log::debug!("inputs-modifiers: {modifiers}");
-                            input.connect_channel_event(clone!(move |input, event| {
-                                if event == spice::ChannelEvent::Opened && input.socket().unwrap().family() == gio::SocketFamily::Unix {
-                                    log::debug!("on unix socket");
-                                }
-                            }));
-                        }));
-                        ChannelExt::connect(&input);
-                    }
-                    Display => {
-                        let dpy = channel.clone().downcast::<spice::DisplayChannel>().unwrap();
-                        this.display.set(Some(&dpy));
+                                input.connect_inputs_modifiers(clone!(move |input| {
+                                    let modifiers = input.key_modifiers();
+                                    log::debug!("inputs-modifiers: {modifiers}");
+                                    input.connect_channel_event(clone!(move |input, event| {
+                                        if event == spice::ChannelEvent::Opened
+                                            && input.socket().unwrap().family()
+                                                == gio::SocketFamily::Unix
+                                        {
+                                            log::debug!("on unix socket");
+                                        }
+                                    }));
+                                }));
+                                ChannelExt::connect(&input);
+                            }
+                            Display => {
+                                let dpy =
+                                    channel.clone().downcast::<spice::DisplayChannel>().unwrap();
+                                this.display.set(Some(&dpy));
 
-                        dpy.connect_display_primary_create(clone!(move |_| {
-                            log::debug!("primary-create");
-                        }));
+                                dpy.connect_display_primary_create(clone!(move |_| {
+                                    log::debug!("primary-create");
+                                }));
 
-                        dpy.connect_display_primary_destroy(|_| {
-                            log::debug!("primary-destroy");
-                        });
-
-                        dpy.connect_display_mark(clone!(#[weak] this, move |_, mark| {
-                            log::debug!("primary-mark: {mark}");
-                            this.invalidate_monitor();
-                        }));
-
-                        dpy.connect_display_invalidate(clone!(#[weak] this, move |_, x, y, w, h| {
-                            log::debug!("primary-invalidate: {:?}", (x, y, w, h));
-                            this.invalidate(x as _, y as _, w as _, h as _);
-                        }));
-
-                        dpy.connect_gl_scanout_notify(clone!(#[weak] this, move |dpy| {
-                            let scanout = dpy.gl_scanout();
-                            log::debug!("notify::gl-scanout: {scanout:?}");
-
-                            #[cfg(unix)]
-                            if let Some(scanout) = scanout {
-                                this.obj().set_dmabuf_scanout(rdw::RdwDmabufScanout {
-                                    width: scanout.width(),
-                                    height: scanout.height(),
-                                    offset: [0; 4],
-                                    stride: [scanout.stride(), 0, 0, 0],
-                                    num_planes: 1,
-                                    fourcc: scanout.format(),
-                                    y0_top: scanout.y0_top(),
-                                    modifier: 0,
-                                    fd: [scanout.into_raw_fd(), -1, -1, -1]
+                                dpy.connect_display_primary_destroy(|_| {
+                                    log::debug!("primary-destroy");
                                 });
+
+                                dpy.connect_display_mark(clone!(
+                                    #[weak]
+                                    this,
+                                    move |_, mark| {
+                                        log::debug!("primary-mark: {mark}");
+                                        this.invalidate_monitor();
+                                    }
+                                ));
+
+                                dpy.connect_display_invalidate(clone!(
+                                    #[weak]
+                                    this,
+                                    move |_, x, y, w, h| {
+                                        log::debug!("primary-invalidate: {:?}", (x, y, w, h));
+                                        this.invalidate(x as _, y as _, w as _, h as _);
+                                    }
+                                ));
+
+                                dpy.connect_gl_scanout_notify(clone!(
+                                    #[weak]
+                                    this,
+                                    move |dpy| {
+                                        let scanout = dpy.gl_scanout();
+                                        log::debug!("notify::gl-scanout: {scanout:?}");
+
+                                        #[cfg(unix)]
+                                        if let Some(scanout) = scanout {
+                                            this.obj().set_dmabuf_scanout(rdw::RdwDmabufScanout {
+                                                width: scanout.width(),
+                                                height: scanout.height(),
+                                                offset: [0; 4],
+                                                stride: [scanout.stride(), 0, 0, 0],
+                                                num_planes: 1,
+                                                fourcc: scanout.format(),
+                                                y0_top: scanout.y0_top(),
+                                                modifier: 0,
+                                                fd: [scanout.into_raw_fd(), -1, -1, -1],
+                                            });
+                                        }
+                                    }
+                                ));
+
+                                dpy.connect_gl_draw(clone!(
+                                    #[weak]
+                                    this,
+                                    move |dpy, x, y, w, h| {
+                                        log::debug!("gl-draw: {:?}", (x, y, w, h));
+                                        this.obj()
+                                            .update_area(x as _, y as _, w as _, h as _, 0, None);
+                                        dpy.gl_draw_done();
+                                    }
+                                ));
+
+                                dpy.connect_monitors_notify(clone!(
+                                    #[weak]
+                                    this,
+                                    move |dpy| {
+                                        let monitors = dpy.monitors();
+                                        log::debug!("notify::monitors: {monitors:?}");
+
+                                        let monitor_config =
+                                            monitors.and_then(|m| m.get(this.nth_monitor).copied());
+                                        if let Some((0, 0, w, h)) =
+                                            monitor_config.map(|c| c.geometry())
+                                        {
+                                            this.obj().set_display_size(Some((w, h)));
+                                        }
+                                        this.monitor_config.set(monitor_config);
+                                    }
+                                ));
+
+                                ChannelExt::connect(&dpy);
                             }
-                        }));
+                            Cursor => {
+                                let cursor =
+                                    channel.clone().downcast::<spice::CursorChannel>().unwrap();
 
-                        dpy.connect_gl_draw(clone!(#[weak] this, move |dpy, x, y, w, h| {
-                            log::debug!("gl-draw: {:?}", (x, y, w, h));
-                            this.obj().update_area(x as _, y as _, w as _, h as _, 0, None);
-                            dpy.gl_draw_done();
-                        }));
+                                cursor.connect_cursor_move(clone!(
+                                    #[weak]
+                                    this,
+                                    move |_cursor, x, y| {
+                                        log::debug!("cursor-move: {:?}", (x, y));
+                                        this.obj().set_cursor_position(Some((x as _, y as _)));
+                                        // Make cursor visible again if hidden before
+                                        if let Some(cursor) = this.cursor_backup.take() {
+                                            this.obj().define_cursor(Some(cursor));
+                                        }
+                                    }
+                                ));
 
-                        dpy.connect_monitors_notify(clone!(#[weak] this, move |dpy| {
-                            let monitors = dpy.monitors();
-                            log::debug!("notify::monitors: {monitors:?}");
-
-                            let monitor_config = monitors.and_then(|m| m.get(this.nth_monitor).copied());
-                            if let Some((0, 0, w, h)) = monitor_config.map(|c| c.geometry()) {
-                                this.obj().set_display_size(Some((w, h)));
-                            }
-                            this.monitor_config.set(monitor_config);
-                        }));
-
-                        ChannelExt::connect(&dpy);
-                    },
-                    Cursor => {
-                        let cursor = channel.clone().downcast::<spice::CursorChannel>().unwrap();
-
-                        cursor.connect_cursor_move(clone!(#[weak] this, move |_cursor, x, y| {
-                            log::debug!("cursor-move: {:?}", (x, y));
-                            this.obj().set_cursor_position(Some((x as _, y as _)));
-                            // Make cursor visible again if hidden before
-                            if let Some(cursor) = this.cursor_backup.take() {
-                                this.obj().define_cursor(Some(cursor));
-                            }
-                        }));
-
-                        cursor.connect_cursor_reset(clone!(#[weak] this, move |_cursor| {
-                            log::debug!("cursor-reset");
-                            this.obj().define_cursor(None);
-                            this.cursor_backup.replace(None);
-                        }));
-
-                        cursor.connect_cursor_hide(clone!(#[weak] this, move |_cursor| {
-                            log::debug!("cursor-hide");
-                            // Backup cursor to show again later
-                            this.cursor_backup.replace(this.obj().cursor());
-                            // Hide cursor
-                            let none_cursor = gdk::Cursor::from_name("none", None);
-                            this.obj().define_cursor(none_cursor);
-                        }));
-
-                        cursor.connect_cursor_notify(clone!(#[weak] this, move |cursor| {
-                            let cursor = cursor.cursor();
-                            log::debug!("cursor-notify: {cursor:?}");
-                            if let Some(cursor) = cursor {
-                                match cursor.cursor_type() {
-                                    Ok(spice::CursorType::Alpha) => {
-                                        let cursor = rdw::Display::make_cursor(
-                                            cursor.data().unwrap(),
-                                            cursor.width(),
-                                            cursor.height(),
-                                            0,
-                                            0,
-                                            1,
-                                        );
-                                        this.obj().define_cursor(Some(cursor));
+                                cursor.connect_cursor_reset(clone!(
+                                    #[weak]
+                                    this,
+                                    move |_cursor| {
+                                        log::debug!("cursor-reset");
+                                        this.obj().define_cursor(None);
                                         this.cursor_backup.replace(None);
                                     }
-                                    e => log::warn!("Unhandled cursor type: {e:?}"),
-                                }
-                            }
-                        }));
+                                ));
 
-                        ChannelExt::connect(&cursor);
+                                cursor.connect_cursor_hide(clone!(
+                                    #[weak]
+                                    this,
+                                    move |_cursor| {
+                                        log::debug!("cursor-hide");
+                                        // Backup cursor to show again later
+                                        this.cursor_backup.replace(this.obj().cursor());
+                                        // Hide cursor
+                                        let none_cursor = gdk::Cursor::from_name("none", None);
+                                        this.obj().define_cursor(none_cursor);
+                                    }
+                                ));
+
+                                cursor.connect_cursor_notify(clone!(
+                                    #[weak]
+                                    this,
+                                    move |cursor| {
+                                        let cursor = cursor.cursor();
+                                        log::debug!("cursor-notify: {cursor:?}");
+                                        if let Some(cursor) = cursor {
+                                            match cursor.cursor_type() {
+                                                Ok(spice::CursorType::Alpha) => {
+                                                    let cursor = rdw::Display::make_cursor(
+                                                        cursor.data().unwrap(),
+                                                        cursor.width(),
+                                                        cursor.height(),
+                                                        0,
+                                                        0,
+                                                        1,
+                                                    );
+                                                    this.obj().define_cursor(Some(cursor));
+                                                    this.cursor_backup.replace(None);
+                                                }
+                                                e => log::warn!("Unhandled cursor type: {e:?}"),
+                                            }
+                                        }
+                                    }
+                                ));
+
+                                ChannelExt::connect(&cursor);
+                            }
+                            _ => {}
+                        }
                     }
-                    _ => {}
-                }
-            }));
+                ),
+            );
         }
 
         fn dispose(&self) {
