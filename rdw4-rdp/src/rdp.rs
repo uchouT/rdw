@@ -1,5 +1,10 @@
 use std::sync::{Arc, Mutex};
 
+use crate::{
+    cliprdr::{CbBackend, PasteProgress},
+    snd::RdwSndBackend,
+    Error, Result,
+};
 use ironrdp::{
     cliprdr::{self, backend::ClipboardMessage, pdu::ClipboardFormat},
     connector::{
@@ -29,12 +34,7 @@ use ironrdp_tokio::{
 use rdw::{gtk::gdk, gtk::glib, KeyEvent};
 use tokio::{net::TcpStream, sync::mpsc};
 use tracing::{debug, trace, warn};
-
-use crate::{
-    cliprdr::{CbBackend, PasteProgress},
-    snd::RdwSndBackend,
-    Error, Result,
-};
+use x509_cert::der::Encode;
 
 enum RdpControlFlow {
     ReconnectWithNewSize { width: u16, height: u16 },
@@ -53,20 +53,21 @@ pub(crate) async fn rdp_run(
 ) {
     loop {
         let cb_backend = CbBackend::new(output_event_tx.clone(), rdp_paste.clone());
-        let (subject, issuer, fingerprint, tls_state) =
-            match tls_connect_begin(domain, port, config.clone(), cb_backend).await {
-                Ok(res) => res,
-                Err(err) => {
-                    let _ = output_event_tx.send(RdpOutputEvent::Terminated(Err(err)));
-                    break;
-                }
-            };
+        let tls_state = match tls_connect_begin(domain, port, config.clone(), cb_backend).await {
+            Ok(res) => res,
+            Err(err) => {
+                let _ = output_event_tx.send(RdpOutputEvent::Terminated(Err(err)));
+                break;
+            }
+        };
 
-        let _ = output_event_tx.send(RdpOutputEvent::TlsNeedsCertVerification {
-            subject,
-            issuer,
-            fingerprint,
-        });
+        let Ok(certificate) = tls_state.certificate.to_der() else {
+            let _ = output_event_tx.send(RdpOutputEvent::Terminated(Err(Error::Other(
+                "TLS Certificate was invalid".to_string(),
+            ))));
+            break;
+        };
+        let _ = output_event_tx.send(RdpOutputEvent::TlsNeedsCertVerification { certificate });
         let mut verified = false;
         if let RdpInputEvent::VerifyTlsCert { is_verified } = input_event_rx.recv().await.unwrap() {
             verified = is_verified
@@ -118,7 +119,7 @@ async fn tls_connect_begin(
     port: u16,
     config: Config,
     cb_backend: CbBackend,
-) -> Result<(String, String, String, TlsConnectState)> {
+) -> Result<TlsConnectState> {
     let stream = TcpStream::connect(format!("{domain}:{port}")).await?;
     let server_addr = stream.peer_addr()?;
 
@@ -146,32 +147,12 @@ async fn tls_connect_begin(
 
     let (upgraded_stream, certificate) = ironrdp_tls::upgrade(initial_stream, domain).await?;
 
-    use x509_cert::der::Encode as _;
-    let mut checksum = glib::Checksum::new(glib::ChecksumType::Sha256)
-        .ok_or_else(|| Error::Other("could not create SHA256".to_string()))?;
-    checksum.update(
-        &certificate
-            .to_der()
-            .map_err(|e| Error::Other(format!("{e}")))?,
-    );
-    let fingerprint = checksum.digest();
-    let mut fingerprint_string = String::new();
-    for byte in fingerprint {
-        fingerprint_string += &*format!("{:X}:", byte);
-    }
-
-    let tbs_certificate = certificate.tbs_certificate.clone();
-    Ok((
-        tbs_certificate.subject.to_string(),
-        tbs_certificate.issuer.to_string(),
-        fingerprint_string,
-        TlsConnectState {
-            connector,
-            upgraded_stream,
-            should_upgrade,
-            certificate,
-        },
-    ))
+    Ok(TlsConnectState {
+        connector,
+        upgraded_stream,
+        should_upgrade,
+        certificate,
+    })
 }
 
 async fn tls_connect_finish(
@@ -408,9 +389,7 @@ impl RdpInputEvent {
 pub enum RdpOutputEvent {
     Connected,
     TlsNeedsCertVerification {
-        subject: String,
-        issuer: String,
-        fingerprint: String,
+        certificate: Vec<u8>,
     },
     GraphicsUpdate {
         image: Arc<Mutex<DecodedImage>>,
