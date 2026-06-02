@@ -299,6 +299,7 @@ async fn active_session(
                             io_channel_id,
                             user_channel_id,
                             desktop_size,
+                            share_id,
                             enable_server_pointer,
                             pointer_software_rendering,
                         } = connection_activation.connection_activation_state()
@@ -318,8 +319,10 @@ async fn active_session(
                                 fast_path::ProcessorBuilder {
                                     io_channel_id,
                                     user_channel_id,
+                                    share_id,
                                     enable_server_pointer,
                                     pointer_software_rendering,
+                                    bulk_decompressor: None,
                                 }
                                 .build(),
                             );
@@ -327,6 +330,12 @@ async fn active_session(
                             break 'activation_seq;
                         }
                     }
+                }
+                ActiveStageOutput::MultitransportRequest(_) => {
+                    debug!("Ignoring multitransport request");
+                }
+                ActiveStageOutput::AutoDetect(_) => {
+                    debug!("Ignoring auto-detect request");
                 }
                 ActiveStageOutput::Terminate(reason) => break 'outer reason,
             }
@@ -341,7 +350,7 @@ fn cliprdr_handle_message(
     message: ClipboardMessage,
     is_initiate: bool,
 ) -> Result<Vec<ActiveStageOutput>> {
-    let Some(cliprdr) = active_stage.get_svc_processor::<cliprdr::CliprdrClient>() else {
+    let Some(cliprdr) = active_stage.get_svc_processor_mut::<cliprdr::CliprdrClient>() else {
         return Err(Error::Other("No clipboard processor".to_owned()));
     };
     let be: &CbBackend = cliprdr.downcast_backend().unwrap();
@@ -352,6 +361,8 @@ fn cliprdr_handle_message(
         ClipboardMessage::SendInitiateCopy(formats) => cliprdr.initiate_copy(&formats)?,
         ClipboardMessage::SendFormatData(response) => cliprdr.submit_format_data(response)?,
         ClipboardMessage::SendInitiatePaste(format) => cliprdr.initiate_paste(format)?,
+        ClipboardMessage::SendFileContentsRequest(request) => cliprdr.request_file_contents(request)?,
+        ClipboardMessage::SendFileContentsResponse(response) => cliprdr.submit_file_contents(response)?,
         ClipboardMessage::Error(e) => {
             return Err(Error::Other(format!("Clipboard backend error: {e}")));
         }

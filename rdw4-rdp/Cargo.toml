@@ -18,7 +18,7 @@ system-deps = "7.0"
 rdw4-rdp = { version = "0.1", feature = "bindings" }
 
 [dependencies]
-ironrdp = { version = "0.14.0", features = [
+ironrdp = { version = "0.15.0", features = [
     "cliprdr",
     "dvc",
     "displaycontrol",
@@ -29,7 +29,7 @@ ironrdp = { version = "0.14.0", features = [
     "pdu",
     "rdpsnd",
 ] }
-ironrdp-tokio = { version = "0.8", features = ["reqwest"] }
+ironrdp-tokio = { version = "0.9", features = ["reqwest"] }
 ironrdp-tls = { version = "0.2.1", features = ["native-tls"] }
 x509-cert = { version = "0.2", default-features = false, features = ["std"] }
 thiserror = "2.0.18"

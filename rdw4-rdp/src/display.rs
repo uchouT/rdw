@@ -542,7 +542,9 @@ mod imp {
                 ClipboardMessage::Error(clipboard_error) => {
                     warn!("Clipboard error: {}", clipboard_error);
                 }
-                ClipboardMessage::SendFormatData(_) => unreachable!(), // handled directly in cliprdr.rs
+                ClipboardMessage::SendFormatData(_)
+                | ClipboardMessage::SendFileContentsRequest(_)
+                | ClipboardMessage::SendFileContentsResponse(_) => unreachable!(),
             }
         }
 
@@ -637,6 +639,10 @@ impl Display {
             pointer_software_rendering: false,
             performance_flags: self.imp().performance_flags.get(),
             timezone_info: TimezoneInfo::default(),
+            alternate_shell: String::new(),
+            work_dir: String::new(),
+            compression_type: None,
+            multitransport_flags: None,
         };
 
         self.imp().connect(domain, port, config).await
