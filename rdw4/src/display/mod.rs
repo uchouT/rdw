@@ -273,7 +273,6 @@ impl<O: IsA<Display> + IsA<gtk::Widget> + IsA<gtk::Accessible>> DisplayExt for O
         log::trace!("set_pixel_format: {format:?}");
         #[cfg(feature = "bindings")]
         unsafe {
-            let (w, h) = size.unwrap_or_default();
             ffi::rdw_display_set_display_pixel_format(self_.to_glib_none().0, format.into_glib());
         }
         #[cfg(not(feature = "bindings"))]
