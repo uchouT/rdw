@@ -14,11 +14,11 @@ the code is compiled as various shared libraries (rdw4/rdw4-vnc/rdw4-rdp..)
 GObject-aware cbindgen & cargo-c are used to help, but there is a lot of room
 for improvements to be able to ship GIR libraries from Rust code easily
 (consider this in development with all the quirks). Furthermore, many of the
-Rust bindings are either new or in active development (gtk-rs, gstreamer-rs, freerdp-rs etc)
+Rust bindings are either new or in active development (gtk-rs, gstreamer-rs, etc)
 
 ## Dependencies
 
-gtk4, gstreamer, gtk-vnc, spice-gtk, freerdp2, [cargo-c](https://crates.io/crates/cargo-c)..
+gtk4, gstreamer, gtk-vnc, spice-gtk, [cargo-c](https://crates.io/crates/cargo-c)..
 
 ## Building
 

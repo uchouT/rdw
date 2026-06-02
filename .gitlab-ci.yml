@@ -9,20 +9,19 @@ variables:
   FDO_UPSTREAM_REPO: malureau/rdw
   GIT_SUBMODULE_STRATEGY: recursive
 
-.rdw.fedora:42:
+.rdw.fedora:44:
   variables:
-    FDO_DISTRIBUTION_VERSION: '42'
-    FDO_DISTRIBUTION_TAG: "2025-07-22.0"
+    FDO_DISTRIBUTION_VERSION: '44'
+    FDO_DISTRIBUTION_TAG: "2026-06-02.0"
 
 build-fedora-container:
   extends:
     - .fdo.container-build@fedora@x86_64
-    - .rdw.fedora:42
+    - .rdw.fedora:44
   stage: container
   variables:
     FDO_DISTRIBUTION_PACKAGES: >-
       cargo
-      freerdp2-devel
       git
       gobject-introspection-devel
       gstreamer1-devel
@@ -43,7 +42,7 @@ build-fedora-container:
 test-build:
   extends:
     - .fdo.distribution-image@fedora
-    - .rdw.fedora:42
+    - .rdw.fedora:44
   stage: test
   script:
     - | # build librdw
