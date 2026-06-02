@@ -31,7 +31,7 @@ use ironrdp::{
 use ironrdp_tokio::{
     reqwest::ReqwestNetworkClient, single_sequence_step_read, split_tokio_framed, FramedWrite,
 };
-use rdw::{gtk::gdk, gtk::glib, KeyEvent};
+use rdw::{gtk::gdk, KeyEvent};
 use tokio::{net::TcpStream, sync::mpsc};
 use tracing::{debug, trace, warn};
 use x509_cert::der::Encode;
