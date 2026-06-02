@@ -361,8 +361,12 @@ fn cliprdr_handle_message(
         ClipboardMessage::SendInitiateCopy(formats) => cliprdr.initiate_copy(&formats)?,
         ClipboardMessage::SendFormatData(response) => cliprdr.submit_format_data(response)?,
         ClipboardMessage::SendInitiatePaste(format) => cliprdr.initiate_paste(format)?,
-        ClipboardMessage::SendFileContentsRequest(request) => cliprdr.request_file_contents(request)?,
-        ClipboardMessage::SendFileContentsResponse(response) => cliprdr.submit_file_contents(response)?,
+        ClipboardMessage::SendFileContentsRequest(request) => {
+            cliprdr.request_file_contents(request)?
+        }
+        ClipboardMessage::SendFileContentsResponse(response) => {
+            cliprdr.submit_file_contents(response)?
+        }
         ClipboardMessage::Error(e) => {
             return Err(Error::Other(format!("Clipboard backend error: {e}")));
         }

@@ -8,8 +8,7 @@ use std::{
     os::raw::{c_char, c_void},
 };
 
-use crate::display::*;
-use crate::ffi::RdwRdpPerformanceFlags;
+use crate::{display::*, ffi::RdwRdpPerformanceFlags};
 use ironrdp::pdu::rdp::client_info::PerformanceFlags;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, glib::ErrorDomain)]
@@ -29,7 +28,10 @@ pub extern "C" fn rdw_rdp_display_get_type() -> glib::ffi::GType {
 pub extern "C" fn rdw_rdp_display_new(
     performance_flags: RdwRdpPerformanceFlags,
 ) -> *mut RdwRdpDisplay {
-    Display::new(Some(PerformanceFlags::from_bits_truncate(performance_flags))).to_glib_full()
+    Display::new(Some(PerformanceFlags::from_bits_truncate(
+        performance_flags,
+    )))
+    .to_glib_full()
 }
 
 /// rdw_rdp_display_connect_async:

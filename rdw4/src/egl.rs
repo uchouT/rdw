@@ -19,7 +19,10 @@ mod imp {
 
     pub(crate) fn egl() -> &'static EglInstance {
         static INSTANCE: OnceLock<EglInstance> = OnceLock::new();
-        INSTANCE.get_or_init(|| unsafe { khronos_egl::DynamicInstance::<khronos_egl::EGL1_5>::load_required() }.expect("failed to load EGL"))
+        INSTANCE.get_or_init(|| {
+            unsafe { khronos_egl::DynamicInstance::<khronos_egl::EGL1_5>::load_required() }
+                .expect("failed to load EGL")
+        })
     }
 
     pub(crate) const LINUX_DMA_BUF_EXT: Enum = 0x3270;

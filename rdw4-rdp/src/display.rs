@@ -10,9 +10,14 @@ use ironrdp::{
 };
 
 use crate::{Error, Result};
-use rdw::gtk::glib::ffi::GByteArray;
-use rdw::gtk::glib::ByteArray;
-use rdw::{gtk, gtk::subclass::prelude::*, DisplayExt};
+use rdw::{
+    gtk,
+    gtk::{
+        glib::{ffi::GByteArray, ByteArray},
+        subclass::prelude::*,
+    },
+    DisplayExt,
+};
 
 #[repr(C)]
 pub struct RdwRdpDisplay {
@@ -49,8 +54,10 @@ mod imp {
         graphics::image_processing::PixelFormat as IronRdpPixelFormat,
         pdu::geometry::Rectangle,
     };
-    use rdw::gtk::glib::ByteArray;
-    use rdw::{gtk::gdk, PixelFormat};
+    use rdw::{
+        gtk::{gdk, glib::ByteArray},
+        PixelFormat,
+    };
     use std::{
         cell::{Cell, RefCell},
         thread::JoinHandle,
