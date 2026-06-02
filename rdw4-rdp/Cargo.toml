@@ -30,10 +30,10 @@ ironrdp = { version = "0.14.0", features = [
     "rdpsnd",
 ] }
 ironrdp-tokio = { version = "0.8", features = ["reqwest"] }
-ironrdp-tls = { version = "0.2.0", features = ["native-tls"] }
+ironrdp-tls = { version = "0.2.1", features = ["native-tls"] }
 x509-cert = { version = "0.2", default-features = false, features = ["std"] }
-thiserror = "2.0.12"
-tokio = { version = "1.44.1", features = ["net", "rt", "macros"] }
+thiserror = "2.0.18"
+tokio = { version = "1.52.3", features = ["net", "rt", "macros"] }
 derivative = "2.2.0"
 rdw = { package = "rdw4", path = "../rdw4", default-features = false }
 nix = { version = "0.31", features = ["fs", "event"] }
