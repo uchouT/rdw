@@ -15,11 +15,11 @@ mod imp {
     use gtk::gdk;
     use std::{ffi::c_void, sync::OnceLock};
 
-    type EglInstance = khronos_egl::Instance<khronos_egl::Static>;
+    type EglInstance = khronos_egl::DynamicInstance<khronos_egl::EGL1_5>;
 
     pub(crate) fn egl() -> &'static EglInstance {
         static INSTANCE: OnceLock<EglInstance> = OnceLock::new();
-        INSTANCE.get_or_init(|| khronos_egl::Instance::new(khronos_egl::Static))
+        INSTANCE.get_or_init(|| unsafe { khronos_egl::DynamicInstance::<khronos_egl::EGL1_5>::load_required() }.expect("failed to load EGL"))
     }
 
     pub(crate) const LINUX_DMA_BUF_EXT: Enum = 0x3270;
