@@ -56,7 +56,7 @@ impl Helper {
             .unwrap()
             .connection_fd()
             .as_raw_fd();
-        let source = glib::source::unix_fd_add_local(fd, glib::IOCondition::IN, move |_, _| {
+        let source = glib_unix::unix_fd_add_local(fd, glib::IOCondition::IN, move |_, _| {
             if let Some(c) = connection.prepare_read() {
                 c.read().unwrap();
             }

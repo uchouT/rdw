@@ -7,7 +7,7 @@ edition = "2021"
 [features]
 default = ["wayland", "x11"]
 bindings = []
-wayland = ["dep:wayland-protocols", "dep:gdk-wl"]
+wayland = ["dep:wayland-protocols", "dep:gdk-wl", "dep:glib-unix"]
 x11 = ["dep:gdk-x11", "dep:x11"]
 capi = ["env_logger"]
 
@@ -32,6 +32,7 @@ futures-util = "0.3"
 epoxy = "0.1"
 keycodemap = { package = "rdw-keycodemap", path = "../keycodemap", version = "0.1" }
 env_logger = { version = "0.11", default-features = false, optional = true }
+glib-unix = { version = "0.22", optional = true }
 wayland-protocols = { version = "0.32", features = [
     "unstable",
     "client",
@@ -44,15 +45,15 @@ features = ["unsafe-assume-initialized", "v4_12"]
 
 [dependencies.gst]
 package = "gstreamer"
-version = "0.24"
+version = "0.25"
 
 [dependencies.gst-app]
 package = "gstreamer-app"
-version = "0.24"
+version = "0.25"
 
 [dependencies.gst-audio]
 package = "gstreamer-audio"
-version = "0.24"
+version = "0.25"
 
 [target.'cfg(unix)'.dependencies]
 
@@ -60,13 +61,13 @@ version = "0.24"
 package = "gdk4-wayland"
 features = ["v4_4", "egl", "wayland_crate"]
 optional = true
-version = "0.10"
+version = "0.11"
 
 [dependencies.gdk-x11]
 package = "gdk4-x11"
 features = ["v4_4", "egl"]
 optional = true
-version = "0.10"
+version = "0.11"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61.0", features = [
