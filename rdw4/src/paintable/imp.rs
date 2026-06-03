@@ -388,7 +388,10 @@ impl Paintable {
         })?;
 
         let region = cairo::Region::create_rectangle(&cairo::RectangleInt::new(
-            0, 0, s.width as _, s.height as _,
+            0,
+            0,
+            s.width as _,
+            s.height as _,
         ));
 
         self.y0_top.set(Some(s.y0_top));

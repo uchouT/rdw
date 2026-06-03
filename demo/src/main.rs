@@ -294,7 +294,7 @@ fn main() {
         }
         if opt.lookup_value("debug", None).is_some() {
             gvnc::set_debug(true);
-            spice::set_debug(true);
+            spice::glib_set_debug(true);
         }
         std::ops::ControlFlow::Continue(())
     });

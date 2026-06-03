@@ -25,7 +25,11 @@ futures-channel = "0.3"
 futures-util = "0.3"
 
 [dependencies.spice-client-glib]
-version = "0.7"
+version = "0.8"
+features = ["v0_43"]
+
+[dependencies.libc]
+version = "0.2"
 
 [package.metadata.capi.library]
 name = "rdw4-spice"

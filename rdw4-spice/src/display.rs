@@ -3,8 +3,6 @@ use gtk::{gdk, gio, glib, prelude::*};
 use rdw::{gtk, DisplayExt};
 use spice::prelude::*;
 use spice_client_glib as spice;
-#[cfg(unix)]
-use std::os::unix::io::IntoRawFd;
 
 mod imp {
     use super::*;
@@ -388,21 +386,27 @@ mod imp {
                                     #[weak]
                                     this,
                                     move |dpy| {
-                                        let scanout = dpy.gl_scanout();
+                                        let scanout = dpy.gl_scanout2();
                                         log::debug!("notify::gl-scanout: {scanout:?}");
 
                                         #[cfg(unix)]
                                         if let Some(scanout) = scanout {
+                                            let src_fds = scanout.fd();
+                                            let n = scanout.num_planes() as usize;
+                                            let mut fd = [-1i32; 4];
+                                            for i in 0..n {
+                                                fd[i] = unsafe { libc::dup(src_fds[i]) };
+                                            }
                                             this.obj().set_dmabuf_scanout(rdw::RdwDmabufScanout {
                                                 width: scanout.width(),
                                                 height: scanout.height(),
-                                                offset: [0; 4],
-                                                stride: [scanout.stride(), 0, 0, 0],
-                                                num_planes: 1,
+                                                offset: *scanout.offset(),
+                                                stride: *scanout.stride(),
+                                                num_planes: scanout.num_planes(),
                                                 fourcc: scanout.format(),
                                                 y0_top: scanout.y0_top(),
-                                                modifier: 0,
-                                                fd: [scanout.into_raw_fd(), -1, -1, -1],
+                                                modifier: scanout.modifier(),
+                                                fd,
                                             });
                                         }
                                     }

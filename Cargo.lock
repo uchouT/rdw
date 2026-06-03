@@ -3397,6 +3397,7 @@ dependencies = [
  "derivative",
  "futures-channel",
  "futures-util",
+ "libc",
  "log",
  "rdw4",
  "spice-client-glib",
@@ -3914,9 +3915,9 @@ dependencies = [
 
 [[package]]
 name = "spice-client-glib"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "771bfe669c8b5d56966f8dadf7593937202192af277125b31f926a8c5e2e0ecb"
+checksum = "ce4e634298837f9c259a52dc1d27d3bbda6fcf02de60963e05e7cb2dc4222eca"
 dependencies = [
  "gio",
  "glib",
@@ -3927,9 +3928,9 @@ dependencies = [
 
 [[package]]
 name = "spice-client-glib-sys"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ccdb80d3910bd4749572324a8f0fdf458aa566f7a6bfc28b3d4e1548a94aba04"
+checksum = "c0afb601c470e3c23b161ee763cbd855e062719ef53bf4a65d4abbc76888be28"
 dependencies = [
  "gio-sys",
  "glib-sys",
