@@ -393,6 +393,7 @@ impl Paintable {
 
         self.y0_top.set(Some(s.y0_top));
         self.update_texture(Some((s.width as _, s.height as _)), Some(&region))?;
+        self.obj().invalidate_size();
         Ok(())
     }
 }
