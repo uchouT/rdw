@@ -125,14 +125,21 @@ impl Paintable {
 
         let (w, h) = size.unwrap_or_else(|| self.size());
         let texture = unsafe {
-            gdk::GLTexture::builder()
+            let sync = gl::FenceSync(gl::SYNC_GPU_COMMANDS_COMPLETE, 0);
+            let builder = gdk::GLTexture::builder()
                 .set_context(Some(ctxt))
                 .set_id(self.texture_id()?)
                 .set_width(w)
                 .set_height(h)
+                .set_format(gdk::MemoryFormat::R8g8b8a8)
                 .set_update_region(region)
-                .set_update_texture(self.texture.take().as_ref())
-                .build()
+                .set_update_texture(self.texture.take().as_ref());
+            let builder = if sync.is_null() {
+                builder
+            } else {
+                builder.set_sync(Some(sync as _))
+            };
+            builder.build()
         };
         self.texture.replace(Some(texture));
         if region.is_some() {
@@ -291,6 +298,7 @@ impl Paintable {
         use crate::egl;
 
         let ctxt = self.gl_context()?;
+        ctxt.make_current();
         let egl_dpy = egl::display(ctxt).ok_or(glib::Error::new(
             crate::Error::GL,
             "Failed to get EGL display",
@@ -351,10 +359,12 @@ impl Paintable {
             attribs.push(s.stride[plane] as _);
             attribs.push(PLANE_OFFSET_ATTRS[plane] as _);
             attribs.push(s.offset[plane] as _);
-            attribs.push(PLANE_MODIFIER_LO_ATTRS[plane] as _);
-            attribs.push((s.modifier & 0xffffffff) as _);
-            attribs.push(PLANE_MODIFIER_HI_ATTRS[plane] as _);
-            attribs.push((s.modifier >> 32 & 0xffffffff) as _);
+            if s.modifier != 0 {
+                attribs.push(PLANE_MODIFIER_LO_ATTRS[plane] as _);
+                attribs.push((s.modifier & 0xffffffff) as _);
+                attribs.push(PLANE_MODIFIER_HI_ATTRS[plane] as _);
+                attribs.push((s.modifier >> 32 & 0xffffffff) as _);
+            }
         }
         attribs.push(egl::NONE as _);
 
@@ -378,10 +388,7 @@ impl Paintable {
         })?;
 
         let region = cairo::Region::create_rectangle(&cairo::RectangleInt::new(
-            0,
-            0,
-            s.width as _,
-            s.height as _,
+            0, 0, s.width as _, s.height as _,
         ));
 
         self.y0_top.set(Some(s.y0_top));
