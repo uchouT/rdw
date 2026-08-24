@@ -191,17 +191,33 @@ impl RusbSession {
             .map_err(|e| qemu_display::Error::Failed(format!("usbredir error: {e}")))?;
         let c = ctxt.clone();
         let inner = handler.inner.clone();
-        let ctxt_thread = std::thread::spawn(move || loop {
-            if inner.lock().unwrap().quit {
-                break;
+        let ctxt_thread = std::thread::spawn(move || {
+            loop {
+                if inner.lock().unwrap().quit {
+                    break;
+                }
+                match fd_poll_readable(stream_fd, None) {
+                    Ok(true) => {
+                        if let Err(e) = redirdev.read_peer() {
+                            log::debug!("usbredir session read error: {e:?}");
+                            break;
+                        }
+                    }
+                    Ok(false) => {}
+                    Err(_) => break,
+                }
+                if redirdev.has_data_to_write() > 0 {
+                    if let Err(e) = redirdev.write_peer() {
+                        log::debug!("usbredir session write error: {e:?}");
+                        break;
+                    }
+                }
+                if let Err(e) = c.handle_events(None) {
+                    log::debug!("libusb event handling error: {e}");
+                    break;
+                }
             }
-            if let Ok(true) = fd_poll_readable(stream_fd, None) {
-                redirdev.read_peer().unwrap();
-            }
-            if redirdev.has_data_to_write() > 0 {
-                redirdev.write_peer().unwrap();
-            }
-            c.handle_events(None).unwrap();
+            log::debug!("usbredir session ended");
         });
         handler
             .inner
@@ -222,7 +238,9 @@ impl Drop for RusbSession {
         inner.quit = true;
         inner.ctxt.interrupt_handle_events();
         // stream will be dropped and stream_thread will kick context_thread
-        inner.event.0.write_all(&[0]).unwrap();
+        if let Err(e) = inner.event.0.write_all(&[0]) {
+            log::warn!("failed to signal usbredir session end: {e}");
+        }
     }
 }
 
