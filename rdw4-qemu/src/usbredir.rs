@@ -3,6 +3,8 @@ use gtk::{glib, prelude::*};
 use rdw::gtk;
 
 #[cfg(unix)]
+use std::os::fd::OwnedFd;
+#[cfg(unix)]
 use std::os::unix::{
     io::{AsRawFd, RawFd},
     net::UnixStream,
@@ -50,9 +52,9 @@ impl UsbRedirBackend for RusbBackend {
 
 #[derive(Debug)]
 struct SessionInner {
-    #[allow(unused)] // keep the device opened, as rusb doesn't take it
+    #[allow(unused)] // keep the device fd opened, as libusb doesn't take ownership of it
     #[cfg(unix)]
-    device_fd: Option<zbus::zvariant::OwnedFd>,
+    device_fd: Option<OwnedFd>,
     stream: UnixStream,
     ctxt: rusb::Context,
     ctxt_thread: Option<JoinHandle<()>>,
@@ -137,7 +139,7 @@ impl RusbSession {
                     (
                         ctxt.open_device_with_fd(fd.as_raw_fd())
                             .map_err(|e| qemu_display::Error::Failed(format!("rusb error: {e}")))?,
-                        Some(fd),
+                        Some(OwnedFd::from(fd)),
                     )
                 }
             }
