@@ -86,14 +86,20 @@ impl DeviceHandler for StreamHandler {
             Err(e) => Err(e),
         };
 
-        inner.quit = read.is_err();
+        // only ever set `quit` on error; a concurrent successful read must not
+        // clear a teardown request from `Drop`
+        if read.is_err() {
+            inner.quit = true;
+        }
         read
     }
 
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let mut inner = self.inner.lock().unwrap();
         let write = inner.stream.write_all(buf);
-        inner.quit = write.is_err();
+        if write.is_err() {
+            inner.quit = true;
+        }
         write?;
         Ok(buf.len())
     }
