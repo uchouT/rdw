@@ -247,12 +247,13 @@ fn fd_poll_readable(fd: RawFd, wait: Option<RawFd>) -> std::io::Result<bool> {
             if wait.is_some() { -1 } else { 0 },
         )
     };
+    const ERR_EVENTS: libc::c_short = libc::POLLHUP | libc::POLLERR | libc::POLLNVAL;
     if ret < 0 {
         Err(std::io::Error::last_os_error())
     } else if ret == 0 {
         Ok(false)
-    } else if fds[0].revents & libc::POLLHUP != 0
-        || (wait.is_some() && fds[1].revents & libc::POLLIN != 0)
+    } else if fds[0].revents & ERR_EVENTS != 0
+        || (wait.is_some() && fds[1].revents & (libc::POLLIN | ERR_EVENTS) != 0)
     {
         Err(std::io::Error::new(std::io::ErrorKind::BrokenPipe, "hup"))
     } else {
