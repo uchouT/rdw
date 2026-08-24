@@ -23,6 +23,9 @@ use usbredirhost::{
 
 use qemu_display::{UsbRedir, UsbRedirBackend};
 
+/// Callback invoked when a redirection session has ended.
+pub type SessionEndedCallback = Box<dyn FnOnce() + Send + 'static>;
+
 #[derive(Debug, Clone)]
 pub struct RusbBackend;
 
@@ -162,6 +165,39 @@ impl RusbSession {
             }
         };
 
+        Self::from_open_device(ctxt, dev, device_fd, stream, None)
+    }
+
+    /// Create a redirection session for an already-opened USB device fd, e.g. one
+    /// acquired via the USB portal. The session keeps the fd open for as long as
+    /// libusb needs it.
+    ///
+    /// `on_ended` is called (from a worker thread!) when the session has ended for
+    /// any reason, including the stream dying because the QEMU side went away.
+    #[cfg(unix)]
+    pub fn from_fd(
+        fd: OwnedFd,
+        stream: UnixStream,
+        on_ended: Option<SessionEndedCallback>,
+    ) -> qemu_display::Result<Self> {
+        let ctxt = rusb::Context::new()
+            .map_err(|e| qemu_display::Error::Failed(format!("libusb init failed: {e}")))?;
+        // Safety: the fd is a valid opened USB device fd and outlives the wrapping
+        // device handle: it is owned by the session, which keeps it alive until the
+        // session threads have ended. libusb does not take ownership of it.
+        let dev = unsafe { ctxt.open_device_with_fd(fd.as_raw_fd()) }
+            .map_err(|e| qemu_display::Error::Failed(format!("rusb error: {e}")))?;
+
+        Self::from_open_device(ctxt, dev, Some(fd), stream, on_ended)
+    }
+
+    fn from_open_device(
+        ctxt: rusb::Context,
+        dev: rusb::DeviceHandle<rusb::Context>,
+        #[cfg(unix)] device_fd: Option<OwnedFd>,
+        stream: UnixStream,
+        on_ended: Option<SessionEndedCallback>,
+    ) -> qemu_display::Result<Self> {
         let c = ctxt.clone();
         let stream_fd = stream.as_raw_fd();
         // really annoying libusb/usbredir APIs...
@@ -218,6 +254,9 @@ impl RusbSession {
                 }
             }
             log::debug!("usbredir session ended");
+            if let Some(on_ended) = on_ended {
+                on_ended();
+            }
         });
         handler
             .inner
