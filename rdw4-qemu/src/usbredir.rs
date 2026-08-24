@@ -104,7 +104,15 @@ impl DeviceHandler for StreamHandler {
         Ok(buf.len())
     }
 
-    fn log(&mut self, _level: LogLevel, _msg: &str) {}
+    fn log(&mut self, level: LogLevel, msg: &str) {
+        let level = match level {
+            LogLevel::Error => log::Level::Error,
+            LogLevel::Warning => log::Level::Warn,
+            LogLevel::Info => log::Level::Info,
+            _ => log::Level::Debug,
+        };
+        log::log!(level, "usbredirhost: {msg}");
+    }
 
     fn flush_writes(&mut self) {}
 }
@@ -179,7 +187,7 @@ impl RusbSession {
             })),
         };
 
-        let redirdev = Device::new(&ctxt, Some(dev), handler.clone(), LogLevel::None as _)
+        let redirdev = Device::new(&ctxt, Some(dev), handler.clone(), LogLevel::Warning as _)
             .map_err(|e| qemu_display::Error::Failed(format!("usbredir error: {e}")))?;
         let c = ctxt.clone();
         let inner = handler.inner.clone();
