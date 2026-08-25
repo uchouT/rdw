@@ -510,8 +510,7 @@ impl Display {
 
         let slf = Display::new_for_console(console);
 
-        let audio_handler = if let Ok(Some(audio)) = q_display
-            .audio().await {
+        let audio_handler = if let Ok(Some(audio)) = q_display.audio().await {
             audio::Handler::new(audio)
                 .await
                 .inspect_err(|e| log::warn!("Failed to setup audio handler: {}", e))
@@ -520,8 +519,7 @@ impl Display {
             None
         };
 
-        let clipboard_handler = if let Ok(Some(clipboard)) = q_display
-            .clipboard().await {
+        let clipboard_handler = if let Ok(Some(clipboard)) = q_display.clipboard().await {
             clipboard::Handler::new(clipboard)
                 .await
                 .inspect_err(|e| log::warn!("Failed to setup clipboard handler: {}", e))
