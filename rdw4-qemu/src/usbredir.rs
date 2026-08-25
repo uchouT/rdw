@@ -23,9 +23,6 @@ use usbredirhost::{
 
 use qemu_display::{UsbRedir, UsbRedirBackend};
 
-/// Callback invoked when a redirection session has ended.
-pub type SessionEndedCallback = Box<dyn FnOnce() + Send + 'static>;
-
 #[derive(Debug, Clone)]
 pub struct RusbBackend;
 
@@ -165,7 +162,7 @@ impl RusbSession {
             }
         };
 
-        Self::from_open_device(ctxt, dev, device_fd, stream, None)
+        Self::from_open_device(ctxt, dev, device_fd, stream, None::<fn()>)
     }
 
     /// Create a redirection session for an already-opened USB device fd, e.g. one
@@ -175,11 +172,14 @@ impl RusbSession {
     /// `on_ended` is called (from a worker thread!) when the session has ended for
     /// any reason, including the stream dying because the QEMU side went away.
     #[cfg(unix)]
-    pub fn from_fd(
+    pub fn from_fd<C>(
         fd: OwnedFd,
         stream: UnixStream,
-        on_ended: Option<SessionEndedCallback>,
-    ) -> qemu_display::Result<Self> {
+        on_ended: Option<C>,
+    ) -> qemu_display::Result<Self>
+    where
+        C: FnOnce() + Send + 'static,
+    {
         let ctxt = rusb::Context::new()
             .map_err(|e| qemu_display::Error::Failed(format!("libusb init failed: {e}")))?;
         // Safety: the fd is a valid opened USB device fd and outlives the wrapping
@@ -191,13 +191,16 @@ impl RusbSession {
         Self::from_open_device(ctxt, dev, Some(fd), stream, on_ended)
     }
 
-    fn from_open_device(
+    fn from_open_device<C>(
         ctxt: rusb::Context,
         dev: rusb::DeviceHandle<rusb::Context>,
         #[cfg(unix)] device_fd: Option<OwnedFd>,
         stream: UnixStream,
-        on_ended: Option<SessionEndedCallback>,
-    ) -> qemu_display::Result<Self> {
+        on_ended: Option<C>,
+    ) -> qemu_display::Result<Self>
+    where
+        C: FnOnce() + Send + 'static,
+    {
         let c = ctxt.clone();
         let stream_fd = stream.as_raw_fd();
         // really annoying libusb/usbredir APIs...
