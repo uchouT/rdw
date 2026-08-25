@@ -447,6 +447,7 @@ glib::wrapper! {
 impl Display {
     /// Create a new [`Display`]. This sets up the inner [`qemu_display::Display`] and
     /// clipboard + audio handling.
+    ///
     /// The `on_disconnected` callback gets called when the display is disconnected via a D-Bus
     /// owner change.
     /// If listening for that owner change raises an error, `Err` is passed to the callback.
@@ -461,7 +462,7 @@ impl Display {
         D::Error: Into<qemu_display::Error>,
         C: FnOnce(Result<(), qemu_display::Error>) + 'static,
     {
-        let qemu_display = qemu_display::Display::new(
+        let q_display = qemu_display::Display::new(
             conn,
             dest,
             #[cfg(windows)]
@@ -469,12 +470,28 @@ impl Display {
         )
         .await?;
 
+        Self::new_with_qemu_display(&q_display, on_disconnected).await
+    }
+
+    /// Create a new [`Display`] from an existing [`qemu_display::Display`].
+    /// This also sets up clipboard + audio handling.
+    ///
+    /// The `on_disconnected` callback gets called when the display is disconnected via a D-Bus
+    /// owner change.
+    /// If listening for that owner change raises an error, `Err` is passed to the callback.
+    pub async fn new_with_qemu_display<C>(
+        q_display: &qemu_display::Display<'static>,
+        on_disconnected: Option<C>,
+    ) -> Result<Self, qemu_display::Error>
+    where
+        C: FnOnce(Result<(), qemu_display::Error>) + 'static,
+    {
         if let Some(on_disconnected) = on_disconnected {
             glib::spawn_future_local(glib::clone!(
                 #[strong]
-                qemu_display,
+                q_display,
                 async move {
-                    match qemu_display.receive_owner_changed().await {
+                    match q_display.receive_owner_changed().await {
                         Ok(mut changed) => {
                             let _ = changed.next().await;
                             log::debug!("disconnected via owner change");
@@ -489,11 +506,12 @@ impl Display {
             ));
         }
 
-        let console = Console::new(qemu_display.connection(), 0).await?;
+        let console = Console::new(q_display.connection(), 0).await?;
 
         let slf = Display::new_for_console(console);
 
-        let audio_handler = if let Ok(Some(audio)) = qemu_display.audio().await {
+        let audio_handler = if let Ok(Some(audio)) = q_display
+            .audio().await {
             audio::Handler::new(audio)
                 .await
                 .inspect_err(|e| log::warn!("Failed to setup audio handler: {}", e))
@@ -502,7 +520,8 @@ impl Display {
             None
         };
 
-        let clipboard_handler = if let Ok(Some(clipboard)) = qemu_display.clipboard().await {
+        let clipboard_handler = if let Ok(Some(clipboard)) = q_display
+            .clipboard().await {
             clipboard::Handler::new(clipboard)
                 .await
                 .inspect_err(|e| log::warn!("Failed to setup clipboard handler: {}", e))
