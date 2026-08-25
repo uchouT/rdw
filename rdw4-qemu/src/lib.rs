@@ -5,4 +5,4 @@ mod usbredir;
 
 pub use display::*;
 pub use qemu_display;
-pub use usbredir::*;
+pub use usbredir::{Handler as UsbRedirHandler, RusbBackend, RusbSession};
