@@ -193,10 +193,7 @@ fn watch_clipboard(
     selection: ClipboardSelection,
     serials: Arc<[AtomicU32; 2]>,
 ) -> Option<SignalHandlerId> {
-    let (clipboard, idx) = match clipboard_from_selection(selection) {
-        Some(it) => it,
-        None => return None,
-    };
+    let (clipboard, idx) = clipboard_from_selection(selection)?;
 
     let id = clipboard.connect_changed(move |clipboard| {
         if clipboard.is_local() {
