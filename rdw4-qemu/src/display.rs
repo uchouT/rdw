@@ -1,3 +1,4 @@
+use crate::{audio, clipboard};
 use futures_util::StreamExt;
 use glib::{clone, subclass::prelude::*, MainContext};
 use gtk::glib;
@@ -11,6 +12,8 @@ use qemu_display::{Console, ConsoleListenerHandler};
 use rdw::{gtk, DisplayExt};
 use std::cell::Cell;
 use std::sync::OnceLock;
+use zbus::names::BusName;
+use zbus::Connection;
 
 const XRGB_FORMAT: pixman_sys::pixman_format_code_t =
     pixman_sys::pixman_format_code_t_PIXMAN_x8r8g8b8;
@@ -53,6 +56,10 @@ mod imp {
         pub(crate) console: OnceLock<Console>,
         keymap: Cell<Option<&'static [u16]>>,
         scanout_map: RefCell<Option<ScanoutMmap>>,
+        #[allow(unused)] // only here to keep it alive
+        pub(crate) audio_handler: RefCell<Option<audio::Handler>>,
+        #[allow(unused)] // only here to keep it alive
+        pub(crate) clipboard_handler: RefCell<Option<clipboard::Handler>>,
     }
 
     #[glib::object_subclass]
@@ -438,7 +445,84 @@ glib::wrapper! {
 }
 
 impl Display {
-    pub fn new(console: Console) -> Self {
+    /// Create a new [`Display`]. This sets up the inner [`qemu_display::Display`] and
+    /// clipboard + audio handling.
+    /// The `on_disconnected` callback gets called when the display is disconnected via a D-Bus
+    /// owner change.
+    /// If listening for that owner change raises an error, `Err` is passed to the callback.
+    pub async fn new<D, C>(
+        conn: &Connection,
+        dest: Option<D>,
+        #[cfg(windows)] peer_pid: u32,
+        on_disconnected: Option<C>,
+    ) -> Result<Self, qemu_display::Error>
+    where
+        D: TryInto<BusName<'static>>,
+        D::Error: Into<qemu_display::Error>,
+        C: FnOnce(Result<(), qemu_display::Error>) + 'static,
+    {
+        let qemu_display = qemu_display::Display::new(
+            conn,
+            dest,
+            #[cfg(windows)]
+            peer_pid,
+        )
+        .await?;
+
+        if let Some(on_disconnected) = on_disconnected {
+            glib::spawn_future_local(glib::clone!(
+                #[strong]
+                qemu_display,
+                async move {
+                    match qemu_display.receive_owner_changed().await {
+                        Ok(mut changed) => {
+                            let _ = changed.next().await;
+                            log::debug!("disconnected via owner change");
+                            on_disconnected(Ok(()));
+                        }
+                        Err(err) => {
+                            log::warn!("owner change raised error: {}", err);
+                            on_disconnected(Err(err));
+                        }
+                    };
+                }
+            ));
+        }
+
+        let console = Console::new(qemu_display.connection(), 0).await?;
+
+        let slf = Display::new_for_console(console);
+
+        let audio_handler = if let Ok(Some(audio)) = qemu_display.audio().await {
+            audio::Handler::new(audio)
+                .await
+                .inspect_err(|e| log::warn!("Failed to setup audio handler: {}", e))
+                .ok()
+        } else {
+            None
+        };
+
+        let clipboard_handler = if let Ok(Some(clipboard)) = qemu_display.clipboard().await {
+            clipboard::Handler::new(clipboard)
+                .await
+                .inspect_err(|e| log::warn!("Failed to setup clipboard handler: {}", e))
+                .ok()
+        } else {
+            None
+        };
+
+        let imp = slf.imp();
+
+        imp.audio_handler.replace(audio_handler);
+        imp.clipboard_handler.replace(clipboard_handler);
+
+        Ok(slf)
+    }
+
+    /// Create a new display from an existing [`Console`].
+    /// This will only set up the display itself, not auxilary components such as clipboard
+    /// or audio handling. To have [`Display`] set up everything, use [`Self::new`].
+    pub fn new_for_console(console: Console) -> Self {
         let obj = glib::Object::builder().build();
         let self_ = imp::Display::from_obj(&obj);
         self_.console.set(console).unwrap();
