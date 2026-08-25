@@ -506,7 +506,13 @@ impl Display {
             ));
         }
 
-        let console = Console::new(q_display.connection(), 0).await?;
+        let console = Console::new(
+            q_display.connection(),
+            0,
+            #[cfg(windows)]
+            q_display.peer_pid(),
+        )
+        .await?;
 
         let slf = Display::new_for_console(console);
 
