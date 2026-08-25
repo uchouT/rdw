@@ -1,5 +1,5 @@
 [package]
-name = "qemu-rdw"
+name = "rdw4-qemu"
 version = "0.1.0"
 authors = ["Marc-André Lureau <marcandre.lureau@redhat.com>"]
 edition = "2021"
