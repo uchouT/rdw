@@ -350,11 +350,8 @@ mod imp {
                                 let image = image.lock().unwrap();
                                 trace!("Pixel format: {:?}", image.pixel_format());
                                 let paintable_format = match image.pixel_format() {
-                                    // I'm assuming the A and X variants should be treatable the same,
-                                    // not sure though.
-                                    IronRdpPixelFormat::BgrA32 | IronRdpPixelFormat::BgrX32 => {
-                                        PixelFormat::Bgra
-                                    }
+                                    IronRdpPixelFormat::BgrA32 => PixelFormat::Bgra,
+                                    IronRdpPixelFormat::BgrX32 => PixelFormat::Bgrx,
                                     IronRdpPixelFormat::RgbA32 | IronRdpPixelFormat::RgbX32 => {
                                         PixelFormat::Rgba
                                     }

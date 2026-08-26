@@ -276,6 +276,8 @@ mod imp {
                                             continue;
                                         }
                                         this.obj()
+                                            .set_display_pixel_format(rdw::PixelFormat::Bgrx);
+                                        this.obj()
                                             .set_display_size(Some((s.width as _, s.height as _)));
                                         this.obj().update_area(
                                             0,
@@ -309,6 +311,8 @@ mod imp {
                                             );
                                             continue;
                                         }
+                                        this.obj()
+                                            .set_display_pixel_format(rdw::PixelFormat::Bgrx);
                                         this.obj().set_display_size(Some((
                                             scanout.width as _,
                                             scanout.height as _,

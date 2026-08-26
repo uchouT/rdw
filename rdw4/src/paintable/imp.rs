@@ -131,7 +131,11 @@ impl Paintable {
                 .set_id(self.texture_id()?)
                 .set_width(w)
                 .set_height(h)
-                .set_format(gdk::MemoryFormat::R8g8b8a8)
+                .set_format(if self.pixel_format.get().has_alpha() {
+                    gdk::MemoryFormat::R8g8b8a8
+                } else {
+                    gdk::MemoryFormat::R8g8b8x8
+                })
                 .set_update_region(region)
                 .set_update_texture(self.texture.take().as_ref());
             let builder = if sync.is_null() {
@@ -245,7 +249,7 @@ impl Paintable {
                     let mut rgb = Vec::with_capacity(data.len());
                     let (ridx, gidx, bidx) = match self.pixel_format.get() {
                         PixelFormat::Rgba => (0, 1, 2),
-                        PixelFormat::Bgra | _ => (2, 1, 0),
+                        PixelFormat::Bgra | PixelFormat::Bgrx | _ => (2, 1, 0),
                     };
                     for pix in data.chunks(4) {
                         rgb.push(pix[ridx]);

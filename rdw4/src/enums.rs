@@ -219,6 +219,7 @@ pub enum PixelFormat {
     #[default]
     Bgra,
     Rgba,
+    Bgrx,
     __Unknown(i32),
 }
 
@@ -226,8 +227,12 @@ impl PixelFormat {
     pub fn as_opengl(self) -> u32 {
         match self {
             PixelFormat::Rgba => gl::RGBA,
-            PixelFormat::Bgra | _ => gl::BGRA,
+            PixelFormat::Bgra | PixelFormat::Bgrx | _ => gl::BGRA,
         }
+    }
+
+    pub fn has_alpha(self) -> bool {
+        !matches!(self, PixelFormat::Bgrx)
     }
 }
 
@@ -238,6 +243,7 @@ impl IntoGlib for PixelFormat {
         match self {
             PixelFormat::Bgra => ffi::RDW_PIXEL_FORMAT_BGRA,
             PixelFormat::Rgba => ffi::RDW_PIXEL_FORMAT_RGBA,
+            PixelFormat::Bgrx => ffi::RDW_PIXEL_FORMAT_BGRX,
             PixelFormat::__Unknown(v) => v,
         }
     }
@@ -248,6 +254,7 @@ impl FromGlib<ffi::RdwPixelFormat> for PixelFormat {
         match value {
             ffi::RDW_PIXEL_FORMAT_BGRA => Self::Bgra,
             ffi::RDW_PIXEL_FORMAT_RGBA => Self::Rgba,
+            ffi::RDW_PIXEL_FORMAT_BGRX => Self::Bgrx,
             value => Self::__Unknown(value),
         }
     }

@@ -461,6 +461,8 @@ pub(crate) mod imp {
             let fb = Framebuffer::new(width as _, height as _, &remote_format);
             self.connection.set_framebuffer(&fb).unwrap();
             self.fb.replace(Some(fb));
+            self.obj()
+                .set_display_pixel_format(rdw::PixelFormat::Bgrx);
         }
 
         fn framebuffer_update_request(&self, incremental: bool) -> Result<(), glib::BoolError> {
