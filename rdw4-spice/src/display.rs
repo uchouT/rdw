@@ -684,8 +684,7 @@ mod imp {
             let fmt = primary.format().unwrap_or(spice::SurfaceFormat::Invalid);
             match fmt {
                 spice::SurfaceFormat::_32XRGB => {
-                    self.obj()
-                        .set_display_pixel_format(rdw::PixelFormat::Bgrx);
+                    self.obj().set_display_pixel_format(rdw::PixelFormat::Bgrx);
                     let stride = primary.stride();
                     let buf = primary.data();
                     let start = x * 4 + y * stride;

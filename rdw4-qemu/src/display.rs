@@ -275,8 +275,7 @@ mod imp {
                                             log::warn!("Format not yet supported: {:X}", s.format);
                                             continue;
                                         }
-                                        this.obj()
-                                            .set_display_pixel_format(rdw::PixelFormat::Bgrx);
+                                        this.obj().set_display_pixel_format(rdw::PixelFormat::Bgrx);
                                         this.obj()
                                             .set_display_size(Some((s.width as _, s.height as _)));
                                         this.obj().update_area(
@@ -311,8 +310,7 @@ mod imp {
                                             );
                                             continue;
                                         }
-                                        this.obj()
-                                            .set_display_pixel_format(rdw::PixelFormat::Bgrx);
+                                        this.obj().set_display_pixel_format(rdw::PixelFormat::Bgrx);
                                         this.obj().set_display_size(Some((
                                             scanout.width as _,
                                             scanout.height as _,
@@ -613,7 +611,7 @@ impl ConsoleListenerMapHandler for ConsoleHandler {
         let (wait_tx, wait_rx) = futures::channel::oneshot::channel();
         self.send(ConsoleEvent::ScanoutMap { scanout, wait_tx });
         if let Err(e) = wait_rx.await {
-            log::warn!("wait update d3d texture2d failed: {}", e);
+            log::warn!("wait ScanoutMap failed: {}", e);
         }
     }
 

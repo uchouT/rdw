@@ -41,7 +41,7 @@ x11 = { version = "2.21", optional = true }
 
 [dependencies.gtk]
 workspace = true
-features = ["unsafe-assume-initialized", "v4_14"]
+features = ["unsafe-assume-initialized", "v4_16"]
 
 [dependencies.gst]
 package = "gstreamer"

@@ -1,19 +1,26 @@
 use super::*;
 use gtk::graphene;
-use std::cell::{Cell, OnceCell, RefCell};
+use std::cell::{Cell, RefCell};
+
+#[cfg(windows)]
+use std::cell::OnceCell;
 
 #[cfg(windows)]
 mod win32;
 
 #[derive(Debug, Default)]
 pub struct Paintable {
-    ctxt: OnceCell<gdk::GLContext>,
-    texture: RefCell<Option<gdk::Texture>>,
-    texture_id: Cell<Option<gl::types::GLuint>>,
+    buffer: RefCell<Vec<u8>>,
+    width: Cell<i32>,
+    height: Cell<i32>,
     pixel_format: Cell<PixelFormat>,
-    use_rgb_fallback: Cell<bool>,
+    texture: RefCell<Option<gdk::Texture>>,
     y0_top: Cell<Option<bool>>,
 
+    #[cfg(windows)]
+    ctxt: OnceCell<gdk::GLContext>,
+    #[cfg(windows)]
+    texture_id: Cell<Option<gl::types::GLuint>>,
     #[cfg(windows)]
     pub(crate) win32: win32::Helper,
 }
@@ -33,6 +40,7 @@ impl ObjectImpl for Paintable {
     fn constructed(&self) {}
 
     fn dispose(&self) {
+        #[cfg(windows)]
         if let Some(tex_id) = self.texture_id.take() {
             unsafe {
                 gl::DeleteTextures(1, &tex_id);
@@ -43,11 +51,11 @@ impl ObjectImpl for Paintable {
 
 impl PaintableImpl for Paintable {
     fn intrinsic_width(&self) -> i32 {
-        self.size().0
+        self.width.get()
     }
 
     fn intrinsic_height(&self) -> i32 {
-        self.size().1
+        self.height.get()
     }
 
     fn snapshot(&self, snapshot: &gdk::Snapshot, width: f64, height: f64) {
@@ -78,13 +86,202 @@ impl Paintable {
     }
 
     pub(crate) fn size(&self) -> (i32, i32) {
-        self.texture
-            .borrow()
-            .as_ref()
-            .map_or((0, 0), |t| (t.width(), t.height()))
+        (self.width.get(), self.height.get())
     }
 
-    fn texture_id(&self) -> Result<gl::types::GLuint, glib::error::Error> {
+    fn memory_format(format: PixelFormat) -> gdk::MemoryFormat {
+        match format {
+            PixelFormat::Bgra => gdk::MemoryFormat::B8g8r8a8Premultiplied,
+            PixelFormat::Rgba => gdk::MemoryFormat::R8g8b8a8Premultiplied,
+            PixelFormat::Bgrx => gdk::MemoryFormat::B8g8r8x8,
+            other => {
+                log::warn!("Unrecognized pixel format {other:?}, falling back to B8G8R8A8");
+                gdk::MemoryFormat::B8g8r8a8Premultiplied
+            }
+        }
+    }
+
+    pub(crate) fn set_pixel_format(&self, format: PixelFormat) -> Result<(), glib::error::Error> {
+        if self.pixel_format() == format {
+            return Ok(());
+        }
+        self.pixel_format.set(format);
+
+        #[cfg(windows)]
+        {
+            let (w, h) = self.size();
+            if w > 0 && h > 0 {
+                self.recreate_gl_texture((w, h), format)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn set_size(&self, w: usize, h: usize) -> Result<(), glib::error::Error> {
+        if self.size() == (w as _, h as _) {
+            return Ok(());
+        }
+        let (w, h) = (w as i32, h as i32);
+        self.width.set(w);
+        self.height.set(h);
+        self.buffer
+            .borrow_mut()
+            .resize((w as usize) * (h as usize) * 4, 0);
+        self.texture.replace(None);
+
+        #[cfg(windows)]
+        self.recreate_gl_texture((w, h), self.pixel_format.get())?;
+
+        self.obj().invalidate_size();
+        Ok(())
+    }
+
+    pub(crate) fn update_area(
+        &self,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+        stride: i32,
+        data: Option<&[u8]>,
+    ) -> Result<(), glib::error::Error> {
+        let (max_w, max_h) = self.size();
+        let x = x.clamp(0, max_w);
+        let y = y.clamp(0, max_h);
+        let w = w.clamp(0, max_w - x);
+        let h = h.clamp(0, max_h - y);
+
+        if let Some(data) = data {
+            #[cfg(windows)]
+            unsafe {
+                self.win32.import_d3d11_texture2d_scanout(self, None)?
+            };
+
+            let buf_stride = max_w as usize * 4;
+            let mut buffer = self.buffer.borrow_mut();
+            for row in 0..h as usize {
+                let src_start = row * stride as usize;
+                let src_end = src_start + w as usize * 4;
+                let dst_start = (y as usize + row) * buf_stride + x as usize * 4;
+                let dst_end = dst_start + w as usize * 4;
+                if src_end <= data.len() && dst_end <= buffer.len() {
+                    buffer[dst_start..dst_end].copy_from_slice(&data[src_start..src_end]);
+                }
+            }
+
+            let bytes = glib::Bytes::from(&*buffer);
+            let region = cairo::Region::create_rectangle(&cairo::RectangleInt::new(x, y, w, h));
+            let texture = gdk::MemoryTextureBuilder::new()
+                .set_bytes(Some(&bytes))
+                .set_format(Self::memory_format(self.pixel_format.get()))
+                .set_width(max_w)
+                .set_height(max_h)
+                .set_stride(buf_stride)
+                .set_update_texture(self.texture.borrow().as_ref())
+                .set_update_region(Some(&region))
+                .build();
+            self.texture.replace(Some(texture));
+            self.obj().invalidate_contents();
+        } else {
+            #[cfg(windows)]
+            if self.win32.has_texture() {
+                self.win32.update_texture(self, x, y, w, h)?;
+                let region = cairo::Region::create_rectangle(&cairo::RectangleInt::new(x, y, w, h));
+                self.update_gl_texture(None, Some(&region))?;
+            }
+            #[cfg(not(windows))]
+            log::warn!("update_area called with no data on non-Windows platform");
+        }
+
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    pub(crate) unsafe fn import_dmabuf(
+        &self,
+        s: &crate::RdwDmabufScanout,
+    ) -> Result<(), glib::error::Error> {
+        use std::os::unix::io::RawFd;
+
+        let display = gdk::Display::default()
+            .ok_or(glib::Error::new(crate::Error::GL, "No default display"))?;
+        let num_planes = s.num_planes as usize;
+
+        let mut dup_fds: Vec<RawFd> = Vec::with_capacity(num_planes);
+        for plane in 0..num_planes {
+            let fd = libc::dup(s.fd[plane]);
+            if fd < 0 {
+                for &duped in &dup_fds {
+                    libc::close(duped);
+                }
+                return Err(glib::Error::new(
+                    crate::Error::GL,
+                    "Failed to dup dmabuf fd",
+                ));
+            }
+            dup_fds.push(fd);
+        }
+
+        let mut builder = gdk::DmabufTextureBuilder::new()
+            .set_display(&display)
+            .set_fourcc(s.fourcc)
+            .set_modifier(s.modifier)
+            .set_width(s.width)
+            .set_height(s.height)
+            .set_n_planes(s.num_planes);
+
+        for (plane, &fd) in dup_fds.iter().enumerate() {
+            builder = builder.set_fd(plane as u32, fd);
+            builder = builder.set_offset(plane as u32, s.offset[plane]);
+            builder = builder.set_stride(plane as u32, s.stride[plane]);
+        }
+
+        let region = cairo::Region::create_rectangle(&cairo::RectangleInt::new(
+            0,
+            0,
+            s.width as _,
+            s.height as _,
+        ));
+
+        let texture = builder
+            .set_update_texture(self.texture.borrow().as_ref())
+            .set_update_region(Some(&region))
+            .build_with_release_func(move || {
+                for fd in dup_fds {
+                    libc::close(fd);
+                }
+            })
+            .map_err(|e| {
+                glib::Error::new(
+                    crate::Error::GL,
+                    &format!("Failed to build dmabuf texture: {e}"),
+                )
+            })?;
+
+        self.width.set(s.width as i32);
+        self.height.set(s.height as i32);
+        self.y0_top.set(Some(s.y0_top));
+        self.texture.replace(Some(texture));
+        self.obj().invalidate_size();
+        self.obj().invalidate_contents();
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn gl_context(&self) -> Result<&gdk::GLContext, glib::error::Error> {
+        let ctxt = if let Some(ctxt) = self.ctxt.get() {
+            ctxt
+        } else {
+            let ctxt = gdk::Display::default().unwrap().create_gl_context()?;
+            self.ctxt.set(ctxt).unwrap();
+            self.ctxt.get().unwrap()
+        };
+        Ok(ctxt)
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn texture_id(&self) -> Result<gl::types::GLuint, glib::error::Error> {
         match self.texture_id.get() {
             None => {
                 let mut tex_id = 0;
@@ -104,18 +301,52 @@ impl Paintable {
         }
     }
 
-    fn gl_context(&self) -> Result<&gdk::GLContext, glib::error::Error> {
-        let ctxt = if let Some(ctxt) = self.ctxt.get() {
-            ctxt
-        } else {
-            let ctxt = gdk::Display::default().unwrap().create_gl_context()?;
-            self.ctxt.set(ctxt).unwrap();
-            self.ctxt.get().unwrap()
-        };
-        Ok(ctxt)
+    #[cfg(windows)]
+    fn recreate_gl_texture(
+        &self,
+        size: (i32, i32),
+        format: PixelFormat,
+    ) -> Result<(), glib::error::Error> {
+        let (w, h) = size;
+        let ctxt = self.gl_context()?;
+        ctxt.make_current();
+
+        unsafe {
+            assert_eq!(gl::GetError(), gl::NO_ERROR);
+            gl::BindTexture(gl::TEXTURE_2D, self.texture_id()?);
+            gl::TexImage2D(
+                gl::TEXTURE_2D,
+                0,
+                gl::RGBA as _,
+                w as _,
+                h as _,
+                0,
+                format.as_opengl(),
+                gl::UNSIGNED_BYTE,
+                std::ptr::null(),
+            );
+            if gl::GetError() != gl::NO_ERROR {
+                gl::TexImage2D(
+                    gl::TEXTURE_2D,
+                    0,
+                    gl::RGB as _,
+                    w as _,
+                    h as _,
+                    0,
+                    gl::RGB,
+                    gl::UNSIGNED_BYTE,
+                    std::ptr::null(),
+                );
+            }
+            assert_eq!(gl::GetError(), gl::NO_ERROR);
+        }
+
+        self.update_gl_texture(Some((w, h)), None)?;
+        Ok(())
     }
 
-    fn update_texture(
+    #[cfg(windows)]
+    fn update_gl_texture(
         &self,
         size: Option<(i32, i32)>,
         region: Option<&cairo::Region>,
@@ -150,257 +381,6 @@ impl Paintable {
             self.obj().invalidate_contents();
         }
 
-        Ok(())
-    }
-
-    fn recreate_texture(
-        &self,
-        size: (i32, i32),
-        format: PixelFormat,
-    ) -> Result<(), glib::error::Error> {
-        let (w, h) = size;
-        let ctxt = self.gl_context()?;
-        ctxt.make_current();
-
-        unsafe {
-            assert_eq!(gl::GetError(), gl::NO_ERROR);
-            self.pixel_format.set(format);
-            self.use_rgb_fallback.set(false);
-            gl::BindTexture(gl::TEXTURE_2D, self.texture_id()?);
-            gl::TexImage2D(
-                gl::TEXTURE_2D,
-                0,
-                gl::RGBA as _,
-                w as _,
-                h as _,
-                0,
-                format.as_opengl(),
-                gl::UNSIGNED_BYTE,
-                std::ptr::null(),
-            );
-            // Fallback for failing BGRA rendering (try to use RGB instead)
-            if gl::GetError() != gl::NO_ERROR {
-                gl::TexImage2D(
-                    gl::TEXTURE_2D,
-                    0,
-                    gl::RGB as _,
-                    w as _,
-                    h as _,
-                    0,
-                    gl::RGB,
-                    gl::UNSIGNED_BYTE,
-                    std::ptr::null(),
-                );
-                self.use_rgb_fallback.set(true);
-            }
-            assert_eq!(gl::GetError(), gl::NO_ERROR);
-        }
-
-        self.update_texture(Some((w as _, h as _)), None)?;
-        self.obj().invalidate_size();
-        Ok(())
-    }
-
-    pub(crate) fn set_pixel_format(&self, format: PixelFormat) -> Result<(), glib::error::Error> {
-        if self.pixel_format() == format {
-            return Ok(());
-        }
-        self.recreate_texture(self.size(), format)
-    }
-
-    pub(crate) fn set_size(&self, w: usize, h: usize) -> Result<(), glib::error::Error> {
-        if self.size() == (w as _, h as _) {
-            return Ok(());
-        }
-        self.recreate_texture((w as _, h as _), self.pixel_format.get())
-    }
-
-    pub(crate) fn update_area(
-        &self,
-        x: i32,
-        y: i32,
-        w: i32,
-        h: i32,
-        stride: i32,
-        data: Option<&[u8]>,
-    ) -> Result<(), glib::error::Error> {
-        let ctxt = self.gl_context()?;
-        ctxt.make_current();
-        unsafe { gl::GetError() };
-
-        let (max_w, max_h) = self.size();
-        let x = x.clamp(0, max_w);
-        let y = y.clamp(0, max_h);
-        let w = w.clamp(0, max_w - x);
-        let h = h.clamp(0, max_h - y);
-
-        // TODO: check data boundaries
-        if let Some(data) = data {
-            #[cfg(windows)]
-            unsafe {
-                self.win32.import_d3d11_texture2d_scanout(self, None)?
-            };
-
-            unsafe {
-                gl::BindTexture(gl::TEXTURE_2D, self.texture_id()?);
-                gl::PixelStorei(gl::UNPACK_ROW_LENGTH, stride / 4);
-                if self.use_rgb_fallback.get() {
-                    // RGB rendering fallback
-                    let mut rgb = Vec::with_capacity(data.len());
-                    let (ridx, gidx, bidx) = match self.pixel_format.get() {
-                        PixelFormat::Rgba => (0, 1, 2),
-                        PixelFormat::Bgra | PixelFormat::Bgrx | _ => (2, 1, 0),
-                    };
-                    for pix in data.chunks(4) {
-                        rgb.push(pix[ridx]);
-                        rgb.push(pix[gidx]);
-                        rgb.push(pix[bidx]);
-                    }
-                    gl::TexSubImage2D(
-                        gl::TEXTURE_2D,
-                        0,
-                        x,
-                        y,
-                        w,
-                        h,
-                        gl::RGB,
-                        gl::UNSIGNED_BYTE,
-                        rgb.as_ptr() as _,
-                    );
-                } else {
-                    gl::TexSubImage2D(
-                        gl::TEXTURE_2D,
-                        0,
-                        x,
-                        y,
-                        w,
-                        h,
-                        self.pixel_format.get().as_opengl(),
-                        gl::UNSIGNED_BYTE,
-                        data.as_ptr() as _,
-                    );
-                }
-                assert_eq!(gl::GetError(), gl::NO_ERROR);
-            }
-        } else {
-            #[cfg(windows)]
-            if self.win32.has_texture() {
-                self.win32.update_texture(self, x, y, w, h)?;
-            }
-        }
-
-        let region = cairo::Region::create_rectangle(&cairo::RectangleInt::new(x, y, w, h));
-        self.update_texture(None, Some(&region))?;
-        Ok(())
-    }
-
-    #[cfg(unix)]
-    pub(crate) unsafe fn import_dmabuf(
-        &self,
-        s: &crate::RdwDmabufScanout,
-    ) -> Result<(), glib::error::Error> {
-        use crate::egl;
-
-        let ctxt = self.gl_context()?;
-        ctxt.make_current();
-        let egl_dpy = egl::display(ctxt).ok_or(glib::Error::new(
-            crate::Error::GL,
-            "Failed to get EGL display",
-        ))?;
-
-        let egl = egl::egl();
-        let egl_image_target = egl::image_target_texture_2d_oes().ok_or(glib::Error::new(
-            crate::Error::GL,
-            "ImageTargetTexture2DOES support missing",
-        ))?;
-
-        const PLANE_FD_ATTRS: [i32; 4] = [
-            egl::DMA_BUF_PLANE0_FD_EXT,
-            egl::DMA_BUF_PLANE1_FD_EXT,
-            egl::DMA_BUF_PLANE2_FD_EXT,
-            egl::DMA_BUF_PLANE3_FD_EXT,
-        ];
-        const PLANE_PITCH_ATTRS: [i32; 4] = [
-            egl::DMA_BUF_PLANE0_PITCH_EXT,
-            egl::DMA_BUF_PLANE1_PITCH_EXT,
-            egl::DMA_BUF_PLANE2_PITCH_EXT,
-            egl::DMA_BUF_PLANE3_PITCH_EXT,
-        ];
-        const PLANE_OFFSET_ATTRS: [i32; 4] = [
-            egl::DMA_BUF_PLANE0_OFFSET_EXT,
-            egl::DMA_BUF_PLANE1_OFFSET_EXT,
-            egl::DMA_BUF_PLANE2_OFFSET_EXT,
-            egl::DMA_BUF_PLANE3_OFFSET_EXT,
-        ];
-        const PLANE_MODIFIER_LO_ATTRS: [i32; 4] = [
-            egl::DMA_BUF_PLANE0_MODIFIER_LO_EXT,
-            egl::DMA_BUF_PLANE1_MODIFIER_LO_EXT,
-            egl::DMA_BUF_PLANE2_MODIFIER_LO_EXT,
-            egl::DMA_BUF_PLANE3_MODIFIER_LO_EXT,
-        ];
-        const PLANE_MODIFIER_HI_ATTRS: [i32; 4] = [
-            egl::DMA_BUF_PLANE0_MODIFIER_HI_EXT,
-            egl::DMA_BUF_PLANE1_MODIFIER_HI_EXT,
-            egl::DMA_BUF_PLANE2_MODIFIER_HI_EXT,
-            egl::DMA_BUF_PLANE3_MODIFIER_HI_EXT,
-        ];
-
-        let num_planes = s.num_planes as usize;
-        let mut attribs = Vec::<usize>::with_capacity(8 + num_planes * 10);
-
-        attribs.push(egl::WIDTH as _);
-        attribs.push(s.width as _);
-        attribs.push(egl::HEIGHT as _);
-        attribs.push(s.height as _);
-        attribs.push(egl::LINUX_DRM_FOURCC_EXT as _);
-        attribs.push(s.fourcc as _);
-
-        for plane in 0..num_planes {
-            attribs.push(PLANE_FD_ATTRS[plane] as _);
-            let fd_plane = if s.fd[plane] >= 0 { plane } else { 0 };
-            attribs.push(s.fd[fd_plane] as _);
-            attribs.push(PLANE_PITCH_ATTRS[plane] as _);
-            attribs.push(s.stride[plane] as _);
-            attribs.push(PLANE_OFFSET_ATTRS[plane] as _);
-            attribs.push(s.offset[plane] as _);
-            if s.modifier != 0 {
-                attribs.push(PLANE_MODIFIER_LO_ATTRS[plane] as _);
-                attribs.push((s.modifier & 0xffffffff) as _);
-                attribs.push(PLANE_MODIFIER_HI_ATTRS[plane] as _);
-                attribs.push((s.modifier >> 32 & 0xffffffff) as _);
-            }
-        }
-        attribs.push(egl::NONE as _);
-
-        let img = egl
-            .create_image(
-                egl_dpy,
-                egl::no_context(),
-                egl::LINUX_DMA_BUF_EXT,
-                egl::no_client_buffer(),
-                &attribs,
-            )
-            .map_err(|e| {
-                glib::Error::new(crate::Error::GL, &format!("eglCreateImage() failed: {e}"))
-            })?;
-
-        gl::BindTexture(gl::TEXTURE_2D, self.texture_id()?);
-        egl_image_target(gl::TEXTURE_2D, img.as_ptr() as gl::types::GLeglImageOES);
-
-        egl.destroy_image(egl_dpy, img).map_err(|e| {
-            glib::Error::new(crate::Error::GL, &format!("eglDestroyImage() failed: {e}"))
-        })?;
-
-        let region = cairo::Region::create_rectangle(&cairo::RectangleInt::new(
-            0,
-            0,
-            s.width as _,
-            s.height as _,
-        ));
-
-        self.y0_top.set(Some(s.y0_top));
-        self.update_texture(Some((s.width as _, s.height as _)), Some(&region))?;
-        self.obj().invalidate_size();
         Ok(())
     }
 }

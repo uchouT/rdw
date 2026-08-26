@@ -5,10 +5,10 @@ use std::os::unix::prelude::RawFd;
 #[cfg(windows)]
 use std::os::windows::raw::HANDLE;
 
-#[cfg(not(feature = "bindings"))]
+#[cfg(all(not(feature = "bindings"), windows))]
 pub use khronos_egl::*;
 
-#[cfg(not(feature = "bindings"))]
+#[cfg(all(not(feature = "bindings"), windows))]
 mod imp {
     use super::*;
     use gdk::prelude::GLContextExt;
@@ -122,7 +122,7 @@ mod imp {
     }
 }
 
-#[cfg(not(feature = "bindings"))]
+#[cfg(all(not(feature = "bindings"), windows))]
 pub use imp::*;
 
 #[cfg(windows)]
