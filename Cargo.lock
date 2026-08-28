@@ -3686,6 +3686,8 @@ name = "rdw4-qemu"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "cargo_metadata",
+ "cbindgen",
  "futures",
  "futures-util",
  "libc",
@@ -3693,6 +3695,7 @@ dependencies = [
  "pixman-sys",
  "qemu-display",
  "rdw4",
+ "system-deps",
  "uds_windows",
  "usbredirhost",
  "windows",

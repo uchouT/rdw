@@ -4,9 +4,18 @@ version = "0.1.0"
 authors = ["Marc-André Lureau <marcandre.lureau@redhat.com>"]
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
-# TODO: bindings & capi
+default = []
+bindings = ["rdw/bindings"]
+capi = []
+
+[build-dependencies]
+cargo_metadata.workspace = true
+cbindgen = { path = "../cbindgen", features = ["gobject"] }
+system-deps = "7.0"
+
+[package.metadata.system-deps]
+rdw4-qemu = { version = "0.1", feature = "bindings" }
 
 [dependencies]
 log = "0.4"
@@ -28,3 +37,15 @@ libc = "0.2"
 [target.'cfg(windows)'.dependencies]
 uds_windows = "1.1.0"
 windows = { version = "0.62", features = ["Win32_System_Memory", "Win32_Foundation"] }
+
+[package.metadata.capi.library]
+name = "rdw4-qemu"
+
+[package.metadata.capi.header]
+name = "rdw-qemu"
+subdirectory = "rdw4"
+generation = false
+
+[package.metadata.capi.pkg_config]
+filename = "rdw4-qemu"
+requires = "rdw4"

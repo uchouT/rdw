@@ -26,28 +26,28 @@ mod imp {
     use std::cell::RefCell;
 
     #[repr(C)]
-    pub struct RdwDisplayQemuClass {
+    pub struct RdwQemuDisplayClass {
         pub parent_class: rdw::RdwDisplayClass,
     }
 
-    unsafe impl ClassStruct for RdwDisplayQemuClass {
+    unsafe impl ClassStruct for RdwQemuDisplayClass {
         type Type = Display;
     }
 
     #[repr(C)]
-    pub struct RdwDisplayQemu {
+    pub struct RdwQemuDisplay {
         parent: rdw::RdwDisplay,
     }
 
-    impl std::fmt::Debug for RdwDisplayQemu {
+    impl std::fmt::Debug for RdwQemuDisplay {
         fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-            f.debug_struct("RdwDisplayQemu")
+            f.debug_struct("RdwQemuDisplay")
                 .field("parent", &self.parent)
                 .finish()
         }
     }
 
-    unsafe impl InstanceStruct for RdwDisplayQemu {
+    unsafe impl InstanceStruct for RdwQemuDisplay {
         type Type = Display;
     }
 
@@ -64,11 +64,11 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for Display {
-        const NAME: &'static str = "RdwDisplayQemu";
+        const NAME: &'static str = "RdwQemuDisplay";
         type Type = super::Display;
         type ParentType = rdw::Display;
-        type Class = RdwDisplayQemuClass;
-        type Instance = RdwDisplayQemu;
+        type Class = RdwQemuDisplayClass;
+        type Instance = RdwQemuDisplay;
     }
 
     impl ObjectImpl for Display {
