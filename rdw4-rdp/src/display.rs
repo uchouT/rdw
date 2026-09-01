@@ -410,7 +410,14 @@ mod imp {
                 }
             ));
 
-            wait_connect_rx.await.unwrap()
+            let result = wait_connect_rx.await.unwrap();
+            if result.is_err() {
+                self.input_event_tx.take();
+                if let Some(t) = self.rdp_thread.take() {
+                    let _ = t.join();
+                }
+            }
+            result
         }
 
         fn clipboard_send_initiate_copy(&self, request: bool) {

@@ -1,4 +1,8 @@
-use ironrdp::{connector::ConnectorError, pdu::PduError, session::SessionError};
+use ironrdp::{
+    connector::{ConnectorError, ConnectorErrorKind},
+    pdu::PduError,
+    session::SessionError,
+};
 use thiserror::Error;
 
 pub use ironrdp;
@@ -36,6 +40,18 @@ pub enum Error {
 
     #[error("Other error: {0}")]
     Other(String),
+}
+
+impl Error {
+    pub fn is_auth_error(&self) -> bool {
+        match self {
+            Error::Connector(e) => matches!(
+                e.kind(),
+                ConnectorErrorKind::Credssp(_) | ConnectorErrorKind::AccessDenied
+            ),
+            _ => false,
+        }
+    }
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;

@@ -17,7 +17,7 @@ use rdw_vnc::gvnc;
 use tracing::debug;
 use tracing_subscriber::EnvFilter;
 
-fn show_error(app: &adw::Application, msg: &str) {
+async fn show_error(app: &adw::Application, msg: &str) {
     let mut dialog = adw::MessageDialog::builder()
         .modal(true)
         .heading("Connection error")
@@ -25,7 +25,9 @@ fn show_error(app: &adw::Application, msg: &str) {
     if let Some(parent) = app.active_window() {
         dialog = dialog.transient_for(&parent);
     }
-    dialog.build().present()
+    let dialog = dialog.build();
+    dialog.add_responses(&[("ok", "Ok")]);
+    dialog.choose_future().await;
 }
 
 async fn show_password_dialog(
@@ -106,16 +108,31 @@ fn rdp_display(app: &adw::Application, uri: glib::Uri) -> rdw::Display {
         #[weak]
         rdp,
         async move {
-            let Some((username, password)) = show_password_dialog(&app, true, true).await else {
-                app.quit();
-                return;
-            };
+            loop {
+                let Some((username, password)) = show_password_dialog(&app, true, true).await
+                else {
+                    app.quit();
+                    return;
+                };
 
-            if let Err(err) = rdp
-                .rdp_connect(&host, port as _, &username, &password)
-                .await
-            {
-                show_error(&app, &err.to_string());
+                match rdp
+                    .rdp_connect(&host, port as _, &username, &password)
+                    .await
+                {
+                    Ok(()) => break,
+                    Err(err) => {
+                        let is_auth = err.is_auth_error();
+                        let msg = if is_auth {
+                            "Authentication failed. Please check your credentials.".to_string()
+                        } else {
+                            err.to_string()
+                        };
+                        show_error(&app, &msg).await;
+                        if !is_auth {
+                            break;
+                        }
+                    }
+                }
             }
         }
     ));
@@ -142,7 +159,10 @@ fn vnc_display(app: &adw::Application, uri: glib::Uri) -> rdw::Display {
         app,
         move |_, msg| {
             has_error2.store(true, Ordering::Relaxed);
-            show_error(&app, msg);
+            let msg = msg.to_string();
+            glib::MainContext::default().spawn_local(async move {
+                show_error(&app, &msg).await;
+            });
         }
     ));
 
@@ -216,7 +236,10 @@ fn spice_display(app: &adw::Application, uri: glib::Uri) -> rdw::Display {
                         use spice::ChannelEvent::*;
                         if event == ErrorConnect {
                             if let Some(err) = channel.error() {
-                                show_error(&app, &err.to_string());
+                                let msg = err.to_string();
+                                glib::MainContext::default().spawn_local(async move {
+                                    show_error(&app, &msg).await;
+                                });
                             }
                         }
                     }
