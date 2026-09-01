@@ -12,7 +12,7 @@ fn main() {
             .exec()
             .unwrap();
 
-        println!("{:?}", &meta);
+        println!("{:?}", meta);
 
         let version = &meta.root_package().unwrap().version;
         let name = &meta.root_package().unwrap().metadata["capi"]["header"]["name"]

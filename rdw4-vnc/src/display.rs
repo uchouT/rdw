@@ -258,7 +258,7 @@ pub(crate) mod imp {
                 #[weak(rename_to = this)]
                 self,
                 move |_, cursor| {
-                    log::debug!("cursor-changed: {:?}", &cursor);
+                    log::debug!("cursor-changed: {:?}", cursor);
                     this.obj().define_cursor(cursor.map(|c| {
                         let (w, h, hot_x, hot_y, data) =
                             (c.width(), c.height(), c.hotx(), c.hoty(), c.data());
