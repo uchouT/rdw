@@ -25,7 +25,8 @@ use ironrdp::{
     rdpdr::{self, NoopRdpdrBackend},
     rdpsnd,
     session::{
-        fast_path, image::DecodedImage, ActiveStage, ActiveStageOutput, GracefulDisconnectReason,
+        fast_path, image::DecodedImage, ActiveStage, ActiveStageBuilder, ActiveStageOutput,
+        GracefulDisconnectReason,
     },
 };
 use ironrdp_tokio::{
@@ -199,7 +200,19 @@ async fn active_session(
         connection_result.desktop_size.height,
     )));
 
-    let mut active_stage = ActiveStage::new(connection_result);
+    let mut active_stage = ActiveStageBuilder {
+        static_channels: connection_result.static_channels,
+        user_channel_id: connection_result.user_channel_id,
+        io_channel_id: connection_result.io_channel_id,
+        message_channel_id: connection_result.message_channel_id,
+        share_id: connection_result.share_id,
+        compression_type: connection_result.compression_type,
+        enable_server_pointer: connection_result.enable_server_pointer,
+        pointer_software_rendering: connection_result.pointer_software_rendering,
+    }
+    .build();
+
+    let activation_factory = connection_result.activation_factory;
 
     let disconnect_reason = 'outer: loop {
         let outputs = tokio::select! {
@@ -278,15 +291,18 @@ async fn active_session(
                 ActiveStageOutput::PointerBitmap(pointer) => {
                     let _ = output_event_tx.send(RdpOutputEvent::PointerBitmap(pointer));
                 }
-                ActiveStageOutput::DeactivateAll(mut connection_activation) => {
+                ActiveStageOutput::DeactivateAll => {
                     // Execute the Deactivation-Reactivation Sequence:
                     // https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpbcgr/dfc234ce-481a-4674-9a5d-2a7bafb14432
                     debug!("Received Server Deactivate All PDU, executing Deactivation-Reactivation Sequence");
+                    let mut connection_activation = activation_factory.create();
+                    let io_channel_id = activation_factory.io_channel_id();
+                    let user_channel_id = activation_factory.user_channel_id();
                     let mut buf = WriteBuf::new();
                     'activation_seq: loop {
                         let written = single_sequence_step_read(
                             &mut reader,
-                            &mut *connection_activation,
+                            &mut connection_activation,
                             &mut buf,
                         )
                         .await?;
@@ -296,8 +312,6 @@ async fn active_session(
                         }
 
                         if let ConnectionActivationState::Finalized {
-                            io_channel_id,
-                            user_channel_id,
                             desktop_size,
                             share_id,
                             enable_server_pointer,
@@ -308,13 +322,11 @@ async fn active_session(
                                 ?desktop_size,
                                 "Deactivation-Reactivation Sequence completed"
                             );
-                            // Update image size with the new desktop size.
                             image_arc = Arc::new(Mutex::new(DecodedImage::new(
                                 IronRdpPixelFormat::RgbA32,
                                 desktop_size.width,
                                 desktop_size.height,
                             )));
-                            // Update the active stage with the new channel IDs and pointer settings.
                             active_stage.set_fastpath_processor(
                                 fast_path::ProcessorBuilder {
                                     io_channel_id,
@@ -366,6 +378,9 @@ fn cliprdr_handle_message(
         }
         ClipboardMessage::SendFileContentsResponse(response) => {
             cliprdr.submit_file_contents(response)?
+        }
+        ClipboardMessage::SendInitiateFileCopy(descriptors) => {
+            cliprdr.initiate_file_copy(descriptors)?
         }
         ClipboardMessage::Error(e) => {
             return Err(Error::Other(format!("Clipboard backend error: {e}")));
@@ -515,7 +530,7 @@ pub(crate) fn rdp_scroll(
     if dx != 0 {
         fp.push(FastPathInputEvent::MouseEvent(MousePdu {
             flags: PointerFlags::HORIZONTAL_WHEEL,
-            number_of_wheel_rotation_units: -dx,
+            number_of_wheel_rotation_units: (-dx).clamp(-256, 255),
             x_position,
             y_position,
         }));
@@ -523,7 +538,7 @@ pub(crate) fn rdp_scroll(
     if dy != 0 {
         fp.push(FastPathInputEvent::MouseEvent(MousePdu {
             flags: PointerFlags::VERTICAL_WHEEL,
-            number_of_wheel_rotation_units: dy,
+            number_of_wheel_rotation_units: dy.clamp(-256, 255),
             x_position,
             y_position,
         }));

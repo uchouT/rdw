@@ -548,7 +548,8 @@ mod imp {
                 }
                 ClipboardMessage::SendFormatData(_)
                 | ClipboardMessage::SendFileContentsRequest(_)
-                | ClipboardMessage::SendFileContentsResponse(_) => unreachable!(),
+                | ClipboardMessage::SendFileContentsResponse(_)
+                | ClipboardMessage::SendInitiateFileCopy(_) => unreachable!(),
             }
         }
 
