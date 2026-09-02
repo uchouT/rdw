@@ -37,16 +37,16 @@ impl From<&rusb::Device<rusb::Context>> for Key {
 
 #[async_trait::async_trait]
 impl UsbRedirBackend for RusbBackend {
-    type Device = rusb::Device<rusb::Context>;
     type Key = Key;
+    type SessionInput = rusb::Device<rusb::Context>;
     type Session = RusbSession;
 
     async fn start_session(
         &self,
-        device: &Self::Device,
+        device: Self::SessionInput,
         stream: UnixStream,
     ) -> qemu_display::Result<Self::Session> {
-        RusbSession::new(device, stream).await
+        RusbSession::new(&device, stream).await
     }
 }
 
@@ -348,9 +348,10 @@ impl Handler {
                             if let Some(dev) =
                                 item.downcast_ref::<rdw::UsbDevice>().unwrap().device()
                             {
+                                let key = Key::from(&dev);
                                 item.set_property(
                                     "active",
-                                    usbredir.is_device_connected(&dev).await,
+                                    usbredir.is_device_connected(&key).await,
                                 );
                             }
                         }
@@ -364,6 +365,7 @@ impl Handler {
                 Some(it) => it,
                 _ => return,
             };
+            let key = Key::from(&device);
 
             let usbredir = usbredir.clone();
             MainContext::default().spawn_local(clone!(
@@ -372,7 +374,12 @@ impl Handler {
                 #[weak]
                 widget,
                 async move {
-                    match usbredir.set_device_state(&device, state).await {
+                    let result = if state {
+                        usbredir.connect_device(key, device).await
+                    } else {
+                        usbredir.disconnect_device(&key).await
+                    };
+                    match result {
                         Ok(active) => item.set_property("active", active),
                         Err(e) => {
                             if state {

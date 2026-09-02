@@ -28,7 +28,7 @@ rdw = { package = "rdw4", path = "../rdw4", default-features = false }
 
 [dependencies.qemu-display]
 git = "https://gitlab.com/marcandre.lureau/qemu-display.git"
-rev = "8ac3da95abeca92e5bb0aee2c58adf54e86f4482"
+rev = "cc31fac8500d00d1e02d7c83b3f5f3915176263f"
 
 [target.'cfg(unix)'.dependencies]
 usbredirhost = "0.4"
